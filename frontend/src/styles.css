@@ -839,6 +839,11 @@ tr.chosen {
   font-size: 10px;
 }
 .modal {
+  /* Preflight resets dialog's browser-default auto margins. Restore viewport centering. */
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  overflow-y: auto;
   color: #cbd6e3;
   background: #141c26;
   border: 1px solid #3b495a;
