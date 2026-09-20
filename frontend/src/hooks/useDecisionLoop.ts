@@ -17,6 +17,15 @@ import {
 } from "../../../shared/game/candidates";
 import { Epoch, questions, sameIdentity } from "../../../shared/decisions";
 import { api } from "../lib/api";
+import {
+  sameRunIdentity,
+  type RunIdentity,
+  type LabResult,
+} from "../../../shared/lab/contracts";
+import {
+  abortableWait as wait,
+  budgetError,
+} from "../../../shared/lab/runtime";
 export type Mode = "mock" | "local" | "real" | "manual";
 export const modeLabels: Record<Mode, string> = {
   mock: "模拟演示",
@@ -24,29 +33,16 @@ export const modeLabels: Record<Mode, string> = {
   real: "真实 AI",
   manual: "手动",
 };
-function wait(ms: number, signal: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(Error("已取消"));
-      return;
-    }
-    const abort = () => {
-      clearTimeout(t);
-      reject(Error("已取消"));
-    };
-    const t = setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }, ms);
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
 export function useDecisionLoop(
   provider: Provider | undefined,
   settings: Settings,
 ) {
   const [game, setGame] = useState(() => newGame(settings.seed));
   const gameRef = useRef(game);
+  const [runInitial, setRunInitial] = useState(game);
+  const [runStartedAt, setRunStartedAt] = useState(() =>
+    new Date().toISOString(),
+  );
   const [running, setRunning] = useState(false);
   const runRef = useRef(false);
   const [mode, setModeState] = useState<Mode>("mock");
@@ -61,6 +57,15 @@ export function useDecisionLoop(
   const [history, setHistory] = useState<DecisionRecord[]>([]);
   const [current, setCurrent] = useState<DecisionRecord>();
   const [elapsed, setElapsed] = useState(0);
+  const [actionLog, setActionLog] = useState<
+    {
+      time: string;
+      action: Action;
+      stateVersion: number;
+      manual: boolean;
+      state: Game;
+    }[]
+  >([]);
   const [stats, setStats] = useState({
     requests: 0,
     failures: 0,
@@ -96,6 +101,7 @@ export function useDecisionLoop(
   }
   function setMode(m: Mode) {
     pause();
+    newSegment();
     modeRef.current = m;
     setModeState(m);
     setCurrent(undefined);
@@ -103,10 +109,14 @@ export function useDecisionLoop(
   }
   function restart() {
     pause();
-    update(newGame(settingsRef.current.seed));
+    const next = newGame(settingsRef.current.seed);
+    update(next);
+    setRunInitial(next);
+    setRunStartedAt(new Date().toISOString());
     setAll([]);
     setCurrent(undefined);
     setHistory([]);
+    setActionLog([]);
     setElapsed(0);
     count({
       requests: 0,
@@ -122,12 +132,48 @@ export function useDecisionLoop(
   }
   function manual(a: Action) {
     if (modeRef.current !== "manual" || !runRef.current) return;
+    setActionLog((log) => [
+      ...log,
+      {
+        time: new Date().toISOString(),
+        action: a,
+        stateVersion: gameRef.current.stateVersion,
+        manual: true,
+        state: gameRef.current,
+      },
+    ]);
     update(step(gameRef.current, a));
     if (gameRef.current.over) {
       runRef.current = false;
       setRunning(false);
       setStage("游戏结束");
     }
+  }
+  function newSegment() {
+    const id = crypto.randomUUID();
+    const next = {
+      ...gameRef.current,
+      sessionId: id,
+      pieceId: `${id}:${gameRef.current.pieces}`,
+      stateVersion: gameRef.current.stateVersion + 1,
+    };
+    update(next);
+    setRunInitial(next);
+    setRunStartedAt(new Date().toISOString());
+    setHistory([]);
+    setCurrent(undefined);
+    setAll([]);
+    setActionLog([]);
+    setError("");
+    count({
+      requests: 0,
+      failures: 0,
+      fallbacks: 0,
+      totalMs: 0,
+      completedRequests: 0,
+    });
+    failures.current = 0;
+    lastRequest.current = 0;
   }
   async function start(single = false) {
     if (busy.current || gameRef.current.over) return;
@@ -165,6 +211,8 @@ export function useDecisionLoop(
         let failure: string | undefined;
         let fallback = false;
         const record: DecisionRecord = {
+          providerId: modeRef.current === "real" ? p?.id : undefined,
+          configVersion: p?.version,
           id: crypto.randomUUID(),
           time: new Date().toISOString(),
           state,
@@ -192,12 +240,9 @@ export function useDecisionLoop(
         try {
           if (modeRef.current === "real") {
             if (!p || !p.enabled) throw Error("请添加并启用一个供应商");
-            if (statRef.current.requests >= config.callLimit) {
-              setError("本局调用上限已达到；重新开始可重置计数");
-              break;
-            }
-            if (failures.current >= config.failureLimit) {
-              setError("连续失败达到阈值，请检查供应商后重新开始");
+            const limit = budgetError(statRef.current.requests, failures.current, config);
+            if (limit) {
+              setError(`${limit}；重新开始可重置计数`);
               break;
             }
             setStage("请求模型");
@@ -213,7 +258,10 @@ export function useDecisionLoop(
             startTime = performance.now();
             requested = true;
             count({ requests: statRef.current.requests + 1 });
-            const identity: Identity = {
+            const identity: Identity & RunIdentity = {
+              experimentId: "tetris",
+              runId: g.sessionId,
+              stepId: g.pieceId,
               requestId: record.id,
               sessionId: g.sessionId,
               pieceId: g.pieceId,
@@ -221,20 +269,46 @@ export function useDecisionLoop(
               configVersion: p.version,
             };
             const reply = await api<{
-              identity: Identity;
-              result: DecisionResult;
-            }>("/decisions", {
+              identity: Identity & RunIdentity;
+              result: DecisionResult | LabResult;
+            }>("/lab/decisions", {
               method: "POST",
               body: JSON.stringify({ providerId: p.id, state, identity }),
               signal: c.signal,
             });
             if (!valid()) break;
             if (
-              !sameIdentity(identity, reply.identity) ||
+              !sameRunIdentity(identity, reply.identity) ||
               gameRef.current !== g
             )
               throw Error("响应已过期");
-            result = reply.result;
+            if ("answers" in reply.result) {
+              const answers = reply.result.answers,
+                placement = answers.placement;
+              if (placement?.type !== "choice")
+                throw Error("placement 答案不匹配");
+              result = {
+                candidateId: placement.choice,
+                probabilities: placement.probabilities,
+                confidence: placement.confidence,
+                boardRisk:
+                  answers.board_risk?.type === "noul"
+                    ? answers.board_risk.noul
+                    : undefined,
+                boardQuality:
+                  answers.board_quality?.type === "score"
+                    ? answers.board_quality.score
+                    : undefined,
+                raw: reply.result.raw,
+                source:
+                  reply.result.source === "Mock 模拟"
+                    ? "Mock 模拟"
+                    : "Jev / 真实模型",
+                latencyMs: reply.result.latencyMs,
+                status: reply.result.status,
+                attempts: reply.result.attempts,
+              };
+            } else result = reply.result;
             failures.current = 0;
           } else {
             setStage(
@@ -329,6 +403,16 @@ export function useDecisionLoop(
           );
           if (!valid()) break;
           currentGame = step(currentGame, action);
+          setActionLog((log) => [
+            ...log,
+            {
+              time: new Date().toISOString(),
+              action,
+              stateVersion: currentGame.stateVersion,
+              manual: false,
+              state: currentGame,
+            },
+          ]);
           executed.push(action);
           update(currentGame);
         }
@@ -363,7 +447,11 @@ export function useDecisionLoop(
   useEffect(() => {
     pause();
     failures.current = 0;
+    newSegment();
   }, [provider?.id, provider?.version]);
+  useEffect(() => {
+    pause();
+  }, [JSON.stringify(settings)]);
   useEffect(() => {
     const timer = setInterval(() => {
       if (runRef.current) setElapsed((t) => t + 1);
@@ -408,6 +496,8 @@ export function useDecisionLoop(
   }, [running, mode, game.clearedLines]);
   return {
     game,
+    runInitial,
+    runStartedAt,
     running,
     mode,
     setMode,
@@ -421,6 +511,7 @@ export function useDecisionLoop(
     current,
     elapsed,
     stats,
+    actionLog,
     start,
     pause,
     restart,

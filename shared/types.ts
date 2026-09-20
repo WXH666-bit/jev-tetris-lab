@@ -95,6 +95,8 @@ export type Identity = {
   configVersion: number;
 };
 export type DecisionRecord = {
+  providerId?:string;
+  configVersion?:number;
   id: string;
   time: string;
   state: GameDecisionState;

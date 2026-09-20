@@ -17,6 +17,9 @@ import {
   type Transport,
 } from "./services/transport.js";
 import type { ProviderInput, TestResult } from "../../shared/types.js";
+import { runIdentitySchema, inputErrors } from "../../shared/lab/contracts.js";
+import { validateExperiment } from "../../shared/experiments/registry.js";
+import { decideStructured } from "./adapters/structured.js";
 export function createApp(store: ProviderStore, send?: Transport) {
   const app = express();
   app.disable("x-powered-by");
@@ -169,6 +172,58 @@ export function createApp(store: ProviderStore, send?: Transport) {
     }
     res.json({ ...result, receipt });
   });
+  app.post("/api/lab/decisions", async (req, res) => {
+    const body = z
+      .object({
+        providerId: z.string(),
+        identity: runIdentitySchema,
+        state: z.unknown(),
+        questions: z.unknown(),
+      })
+      .parse(req.body);
+    const { identity } = body;
+    const input = validateExperiment(
+      identity.experimentId,
+      body.state,
+      body.questions,
+    );
+    const p = store.credentials(body.providerId);
+    if (identity.configVersion !== p.version)
+      throw new ApiError("供应商配置已过期", 409);
+    const key = identity.runId;
+    if (inflight.has(key)) throw new ApiError("运行已有决策请求", 409);
+    const stamp = Date.now();
+    calls = calls.filter((t) => stamp - t < 60000);
+    if (calls.length >= 60)
+      throw new ApiError("本机接口达到每分钟 60 次安全上限", 429);
+    for (const [id, time] of recent)
+      if (stamp - time > 3600000) recent.delete(id);
+    if (recent.has(identity.requestId))
+      throw new ApiError("重复 requestId", 409);
+    recent.set(identity.requestId, stamp);
+    calls.push(stamp);
+    const controller = new AbortController();
+    inflight.set(key, controller);
+    res.on("close", () => controller.abort());
+    try {
+      const result = await decideStructured(
+        p,
+        input.state,
+        input.questions,
+        controller.signal,
+        send,
+      );
+      if (
+        controller.signal.aborted ||
+        store.get(p.id).version !== identity.configVersion
+      )
+        throw new ApiError("响应已过期", 409);
+      res.json({ identity, result, payload: { model: p.modelId, ...input } });
+    } finally {
+      if (inflight.get(key) === controller) inflight.delete(key);
+    }
+  });
+  // Compatibility endpoint for the original Tetris client; new modules use /lab/decisions.
   app.post("/api/decisions", async (req, res) => {
     const { providerId, state, identity } = z
       .object({
@@ -235,7 +290,7 @@ export function createApp(store: ProviderStore, send?: Transport) {
           raw: err instanceof ApiError ? err.raw : undefined,
           error:
             err instanceof ZodError
-              ? "输入格式不正确"
+              ? inputErrors(err)
               : err instanceof ApiError
                 ? err.message
                 : "配置操作失败，请检查供应商是否存在及安全存储配置",

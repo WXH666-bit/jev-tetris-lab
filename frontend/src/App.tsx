@@ -1,69 +1,80 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Blocks,
-  SlidersHorizontal,
-  Plug,
-  Play,
-  Pause,
-  RotateCcw,
-  StepForward,
-  ChevronDown,
-  Keyboard,
   FlaskConical,
+  LayoutDashboard,
+  Grid2X2,
+  Plug,
+  History,
+  Settings2,
   Sparkles,
+  ArrowUpRight,
+  Download,
 } from "lucide-react";
-import type { Candidate, Provider, Settings } from "../../shared/types";
+import type { Provider } from "../../shared/types";
+import type { RunRecord } from "../../shared/lab/records";
 import { api } from "./lib/api";
 import {
-  modeLabels,
-  useDecisionLoop,
-  type Mode,
-} from "./hooks/useDecisionLoop";
-import { TetrisBoard, MiniPiece } from "./components/TetrisBoard";
-import { AIPanel } from "./components/AIPanel";
-import { ProviderManager } from "./providers/ProviderManager";
-import { Modal } from "./components/Modal";
+  JevCore,
+  OrbitalBackdrop,
+  ExperimentPod,
+  useSpatial,
+  type VisualQuality,
+} from "./components/SpatialLab";
 import { Starfield } from "./components/Starfield";
-const defaults: Settings = {
-  seed: 42,
-  minIntervalMs: 2000,
-  callLimit: 100,
-  candidateLimit: 24,
-  fallback: true,
-  failureLimit: 3,
-  mockDelayMs: 400,
-  mockFault: "none",
+import { ProviderManager } from "./providers/ProviderManager";
+import { LabContext } from "./lab/context";
+import { catalog, frontendExperiments } from "./lab/registry";
+import { SettingsPage, loadSettings } from "./lab/SettingsPage";
+import { Observer, downloadRuns, statusLabels } from "./lab/Observer";
+const modes: Record<string, string> = {
+  mock: "Mock 模拟",
+  local: "本地策略",
+  real: "真实 AI",
+  manual: "手动操作",
 };
-function loadSettings() {
-  try {
-    return {
-      ...defaults,
-      ...JSON.parse(localStorage.getItem("jev-settings") || "{}"),
-    } as Settings;
-  } catch {
-    return defaults;
-  }
+const allowed = new Set([
+  "overview",
+  "catalog",
+  "records",
+  "settings",
+  ...catalog.map((e) => e.id),
+]);
+function initialRoute() {
+  const value = location.hash.slice(1);
+  return allowed.has(value) ? value : "overview";
 }
 export default function App() {
-  const [animated, setAnimated] = useState(() => {
-    try {
-      return localStorage.getItem("jev-motion") !== "off";
-    } catch {
-      return true;
-    }
-  });
+  const [route, setRoute] = useState(initialRoute);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [health, setHealth] = useState("连接中");
   const [secretMode, setSecretMode] = useState("等待后端");
   const [manager, setManager] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(loadSettings);
-  const [hover, setHover] = useState<Candidate>();
-  const active = providers.find((p) => p.active);
-  const loop = useDecisionLoop(active, settings);
-  useEffect(() => {
-    setHover(undefined);
-  }, [loop.game.pieceId]);
+  const [animated, setAnimated] = useState(
+    () => localStorage.getItem("jev-motion") !== "off",
+  );
+  const spatial = useSpatial(animated);
+  const [runs, setRuns] = useState<RunRecord[]>([]);
+  const [selectedRun, setSelectedRun] = useState<string>();
+  const [mobilePane, setMobilePane] = useState("environment");
+  const [suspendToken, setSuspendToken] = useState(0);
+  const provider = providers.find((p) => p.active);
+  const definition = catalog.find((d) => d.id === route);
+  const Active = frontendExperiments[route]?.component;
+  const publish = useCallback(
+    (record: RunRecord) =>
+      setRuns((all) => {
+        const found = all.findIndex((r) => r.id === record.id);
+        return found < 0
+          ? [record, ...all].slice(0, 100)
+          : all.map((r, i) => (i === found ? record : r));
+      }),
+    [],
+  );
+  const context = useMemo(
+    () => ({ provider, settings, publish, suspendToken }),
+    [provider, settings, publish, suspendToken],
+  );
   async function refresh() {
     setProviders(await api<Provider[]>("/providers"));
   }
@@ -81,107 +92,130 @@ export default function App() {
         }
       })
       .catch(() => {
-        if (valid) setHealth("后端未连接 · 本地可用");
+        if (valid) setHealth("后端不可用 · 本地模式可用");
       });
+    const change = () => {
+      setRoute(initialRoute());
+      setMobilePane("environment");
+      setSelectedRun(undefined);
+    };
+    window.addEventListener("hashchange", change);
     return () => {
       valid = false;
+      window.removeEventListener("hashchange", change);
     };
   }, []);
   useEffect(() => {
     localStorage.setItem("jev-settings", JSON.stringify(settings));
   }, [settings]);
-  function openManager() {
-    loop.pause();
+  function navigate(next: string) {
+    location.hash = next;
+  }
+  function manage() {
+    setSuspendToken((v) => v + 1);
     setManager(true);
   }
+  function motion() {
+    setAnimated((v) => !v);
+    localStorage.setItem("jev-motion", animated ? "off" : "on");
+  }
+  const selected = runs.find((r) => r.id === selectedRun);
+  const title =
+    definition?.name ??
+    {
+      overview: "实验室概览",
+      catalog: "实验目录",
+      records: "实验记录",
+      settings: "设置",
+    }[route];
   return (
-    <div className={`app-shell${animated ? "" : " motion-off"}`}>
-      <Starfield animated={animated} />
-      <header className="topbar">
-        <a className="brand" href="/">
-          <div className="brand-icon">
-            <Blocks size={23} />
-          </div>
+    <div
+      ref={spatial.ref}
+      data-quality={spatial.effective}
+      data-route={route}
+      className={`app-shell lab-shell spatial-lab ${animated ? "" : "motion-off"} pane-${mobilePane}`}
+    >
+      <Starfield
+        animated={spatial.effective !== "reduced"}
+        density={
+          spatial.effective === "enhanced"
+            ? 240
+            : spatial.effective === "reduced"
+              ? 65
+              : 110
+        }
+      />
+      <OrbitalBackdrop />
+      <aside className="lab-nav">
+        <button className="lab-brand" onClick={() => navigate("overview")}>
+          <FlaskConical size={24} />
           <span>
-            Jev <b>Tetris Lab</b>
-            <small>A COSMIC DECISION PLAYGROUND</small>
+            Jev AI Lab<small>Jev AI 决策实验室</small>
           </span>
-          <span className="version">COSMIC EDITION</span>
-        </a>
-        <div className="top-actions">
+        </button>
+        <div className="nav-label">工作空间</div>
+        {[
+          { id: "overview", label: "实验室概览", Icon: LayoutDashboard },
+          { id: "catalog", label: "实验目录", Icon: Grid2X2 },
+          { id: "providers", label: "模型供应商", Icon: Plug },
+          { id: "records", label: "实验记录", Icon: History },
+          { id: "settings", label: "设置", Icon: Settings2 },
+        ].map(({ id, label, Icon }) => (
           <button
-            className="motion-toggle"
-            aria-label="星空动态效果"
-            aria-pressed={animated}
-            title={animated ? "关闭装饰动态效果" : "开启装饰动态效果"}
-            onClick={() => {
-              setAnimated((v) => !v);
-              try {
-                localStorage.setItem("jev-motion", animated ? "off" : "on");
-              } catch {
-                /* Optional preference storage. */
-              }
-            }}
+            key={id}
+            className={
+              route === id || (id === "providers" && manager) ? "active" : ""
+            }
+            onClick={() => (id === "providers" ? manage() : navigate(id))}
           >
-            <Sparkles size={16} />
-            <span>{animated ? "动态开启" : "静谧模式"}</span>
+            <Icon size={17} />
+            {label}
+            {id === "records" && runs.length > 0 && (
+              <small>{runs.length}</small>
+            )}
           </button>
-          <span className="connection">
-            <span className="dot" />
-            {health}
-          </span>
-          <button onClick={openManager}>
-            <Plug size={16} />
-            模型供应商
-          </button>
+        ))}
+        <div className="nav-label">可用实验</div>
+        {catalog.map((e, i) => (
           <button
-            aria-label="设置"
-            onClick={() => {
-              loop.pause();
-              setSettingsOpen(true);
-            }}
+            className={route === e.id ? "active" : ""}
+            key={e.id}
+            onClick={() => navigate(e.id)}
           >
-            <SlidersHorizontal size={17} />
+            <span className="nav-index">0{i + 1}</span>
+            {e.name}
           </button>
+        ))}
+        <div className="nav-bottom">
+          <span className="dot" /> 会话内实验记录
+          <p>刷新页面后清空。模型配置保存在本机。</p>
         </div>
-      </header>
-      <main>
-        <div className="workspace-heading">
-          <div className="orbital-art" aria-hidden="true">
-            <div className="orbital-ring" />
-            <div className="orbital-ring second" />
-            <div className="planet" />
-            <span className="satellite" />
-          </div>
+      </aside>
+      <div className="lab-main">
+        <header className="lab-topbar">
           <div>
-            <div className="eyebrow hero-kicker">
-              <span /> EXPERIMENT 001 <i /> INTO THE UNKNOWN
-            </div>
-            <h1>
-              在星海中，
-              <br className="hero-break" />
-              观察 AI 的每一次选择<span>。</span>
-            </h1>
-            <p>每一个落点，都是一次探索。让模型的决策轨迹，在此刻显现。</p>
+            <span className="eyebrow">
+              JEV AI LAB / {definition?.english ?? "WORKSPACE"}
+            </span>
+            <h1>{title}</h1>
           </div>
-          <div className="mode-select">
-            <span className="badge cyan">
-              {loop.mode === "real" && active?.protocol === "mock"
-                ? "模拟演示 · 后端"
-                : modeLabels[loop.mode]}
+          <div className="lab-global-tools">
+            <span className="connection">
+              <span className="dot" />
+              {health}
             </span>
             <select
-              aria-label="选择供应商"
-              value={active?.id ?? ""}
+              aria-label="全局模型供应商"
+              value={provider?.id ?? ""}
               onChange={async (e) => {
-                loop.pause();
+                setSuspendToken((v) => v + 1);
                 try {
                   await api(`/providers/${e.target.value}/active`, {
                     method: "POST",
                   });
                   await refresh();
-                } catch {
-                  setHealth("切换失败，请检查后端");
+                } catch (e) {
+                  setHealth((e as Error).message);
                 }
               }}
             >
@@ -191,303 +225,287 @@ export default function App() {
               {providers
                 .filter((p) => p.enabled)
                 .map((p) => (
-                  <option value={p.id} key={p.id}>
+                  <option key={p.id} value={p.id}>
                     {p.name} / {p.modelId}
                   </option>
                 ))}
             </select>
+            <select
+              aria-label="空间视觉质量"
+              value={spatial.quality}
+              onChange={(e) =>
+                spatial.setQuality(e.target.value as VisualQuality)
+              }
+              title={
+                spatial.systemReduced
+                  ? "系统减少动态效果已优先生效"
+                  : spatial.lowPower
+                    ? "低性能设备自动使用标准档"
+                    : "仅影响视觉，不改变实验节奏"
+              }
+            >
+              <option value="standard">标准空间</option>
+              <option value="enhanced">增强空间</option>
+              <option value="reduced">减少动态</option>
+            </select>
+            <button
+              aria-label="星空动态效果"
+              aria-pressed={animated}
+              onClick={motion}
+            >
+              <Sparkles size={17} />
+            </button>
           </div>
-        </div>
-        <div className="workspace">
-          <section className="game-panel panel">
-            <div className="panel-header">
-              <div className="flex items-center gap-2">
-                <span className="live-indicator" />
-                <h2>游戏实验区</h2>
-              </div>
-              <div className="flex gap-2 items-center">
-                <span className="muted mono">SEED {settings.seed}</span>
-                <span className="badge">
-                  {loop.game.over
-                    ? "已结束"
-                    : loop.running
-                      ? "运行中"
-                      : "已暂停"}
-                </span>
-              </div>
-            </div>
-            <div className="game-stage">
-              <div className="board-column">
-                <div className="board-ruler">
-                  {Array.from({ length: 10 }, (_, i) => (
-                    <span key={i}>{i}</span>
-                  ))}
-                </div>
-                <TetrisBoard
-                  landingKey={loop.game.pieces}
-                  board={
-                    hover && loop.current
-                      ? loop.current.state.board
-                      : loop.game.board
-                  }
-                  piece={
-                    hover && loop.current
-                      ? loop.current.state.currentPiece
-                      : loop.game.currentPiece
-                  }
-                  target={hover ?? loop.target}
-                  over={loop.game.over}
-                />
-                {hover && (
-                  <p className="cyan text-xs mt-2">
-                    候选预览 · 决策快照 {hover.id}
-                  </p>
-                )}
-                <div className="board-caption">
-                  <span>
-                    <i className="legend ghost-block" />
-                    硬降预览
+        </header>
+        <main className="lab-content">
+          <LabContext.Provider value={context}>
+            {Active ? (
+              <>
+                <div className="experiment-intro">
+                  <p>{definition?.description}</p>
+                  <span className="muted">
+                    {provider
+                      ? `已选配置：${provider.name} · ${provider.modelId} · ${provider.protocol}`
+                      : "尚未选择远端配置；默认无需密钥即可运行"}
                   </span>
-                  <span>
-                    <i className="legend target-block" />
-                    AI 目标落点
-                  </span>
-                  <span className="mono">10 × 20</span>
                 </div>
-              </div>
-              <aside className="game-sidebar">
-                <div className="next-card">
-                  <span className="eyebrow">UP NEXT</span>
-                  <MiniPiece type={loop.game.nextPiece} />
-                  <span className="muted mono">7-BAG RANDOMIZER</span>
-                </div>
-                <div className="score-card">
-                  <span className="eyebrow">SCORE</span>
-                  <strong data-testid="score" className="mono">
-                    {loop.game.score.toString().padStart(5, "0")}
-                  </strong>
-                  <span className="muted">消行奖励 × 等级</span>
-                </div>
-                <div className="game-stat">
-                  <span>消除行数</span>
-                  <b data-testid="lines">{loop.game.clearedLines}</b>
-                </div>
-                <div className="game-stat">
-                  <span>当前等级</span>
-                  <b>{Math.floor(loop.game.clearedLines / 10) + 1}</b>
-                </div>
-                <div className="game-stat">
-                  <span>已落地方块</span>
-                  <b data-testid="pieces">{loop.game.pieces}</b>
-                </div>
-                <div className="game-stat">
-                  <span>存活时间</span>
-                  <b>
-                    {Math.floor(loop.elapsed / 60)
-                      .toString()
-                      .padStart(2, "0")}
-                    :{(loop.elapsed % 60).toString().padStart(2, "0")}
-                  </b>
-                </div>
-                <div className="experiment-note">
-                  <FlaskConical size={19} />
-                  <strong>决策回合制</strong>
-                  <p>等待模型时暂停重力；收到结果后，逐步执行合法动作。</p>
-                  <small>播放速度仅影响动作展示。</small>
-                </div>
-              </aside>
-            </div>
-            <div className="controls">
-              <div className="control-row">
-                <button
-                  className="primary grow"
-                  onClick={() =>
-                    loop.running ? loop.pause() : void loop.start()
-                  }
-                  disabled={loop.game.over}
-                >
-                  {loop.running ? <Pause size={16} /> : <Play size={16} />}{" "}
-                  {loop.running
-                    ? "暂停"
-                    : loop.game.pieces
-                      ? "继续实验"
-                      : "开始实验"}
-                </button>
-                <button
-                  disabled={
-                    loop.running || loop.game.over || loop.mode === "manual"
-                  }
-                  onClick={() => void loop.start(true)}
-                >
-                  <StepForward size={16} />
-                  单步执行
-                </button>
-                <button
-                  aria-label="重新开始"
-                  title="使用当前种子重新开始"
-                  onClick={loop.restart}
-                >
-                  <RotateCcw size={16} />
-                </button>
-              </div>
-              <div className="control-row justify-between">
-                <div className="speed-buttons">
-                  {[1, 2, 4].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => loop.setSpeed(s)}
-                      className={loop.speed === s ? "active" : ""}
-                    >
-                      {s}x
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="muted">控制模式</span>
-                  <select
-                    aria-label="控制模式"
-                    value={loop.mode}
-                    onChange={(e) => loop.setMode(e.target.value as Mode)}
+                <div className="mobile-panes" role="tablist">
+                  <button
+                    role="tab"
+                    aria-selected={mobilePane === "environment"}
+                    onClick={() => setMobilePane("environment")}
                   >
-                    {Object.entries(modeLabels).map(([v, l]) => (
-                      <option key={v} value={v}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
+                    实验环境
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={mobilePane === "observer"}
+                    onClick={() => setMobilePane("observer")}
+                  >
+                    决策观察台
+                  </button>
                 </div>
-              </div>
-              {loop.error && (
-                <div role="alert" className="error">
-                  {loop.error}
+                <Active key={route} />
+              </>
+            ) : route === "settings" ? (
+              <SettingsPage
+                settings={settings}
+                onChange={setSettings}
+                animated={animated}
+                onAnimated={motion}
+              />
+            ) : route === "records" ? (
+              <>
+                <div className="page-heading">
+                  <div>
+                    <h2>本次会话的运行记录</h2>
+                    <p>
+                      按实验与运行分别保存，暂停、取消、失败和成功独立标记。刷新后不保留；最多保留
+                      100 次运行。
+                    </p>
+                  </div>
+                  <button
+                    disabled={!runs.length}
+                    onClick={() => downloadRuns(runs)}
+                  >
+                    <Download size={16} />
+                    导出全部脱敏 JSON
+                  </button>
                 </div>
-              )}
-              {loop.mode === "manual" && (
-                <div className="manual-buttons">
-                  {(
-                    ["left", "right", "ccw", "cw", "down", "drop"] as const
-                  ).map((a, i) => (
-                    <button key={a} onClick={() => loop.manual(a)}>
-                      {["←", "→", "逆旋", "顺旋", "↓", "硬降"][i]}
+                {selected ? (
+                  <>
+                    <button onClick={() => setSelectedRun(undefined)}>
+                      ← 返回记录列表
                     </button>
+                    <div className="record-detail">
+                      <h2>
+                        {
+                          catalog.find((d) => d.id === selected.experimentId)
+                            ?.name
+                        }{" "}
+                        · {statusLabels[selected.status]}
+                      </h2>
+                      <p>
+                        {modes[selected.mode]} · {selected.provider.modelId} ·{" "}
+                        {new Date(selected.startedAt).toLocaleString()}
+                      </p>
+                      <button onClick={() => downloadRuns([selected])}>
+                        导出本次运行
+                      </button>
+                      <Observer
+                        key={selected.id}
+                        stage="历史运行 · 非实时环境"
+                        current={selected.steps.at(-1)}
+                        steps={selected.steps}
+                        metrics={selected.metrics}
+                        snapshot={
+                          frontendExperiments[selected.experimentId]?.snapshot
+                        }
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <RunList runs={runs} onSelect={setSelectedRun} />
+                )}
+              </>
+            ) : (
+              <>
+                <div className="page-heading">
+                  <div>
+                    <span className="eyebrow">OBSERVE / VERIFY / COMPARE</span>
+                    <h2>
+                      {route === "overview"
+                        ? "让 AI 的每一次选择，都成为一次实验。"
+                        : "选择你想观察的决策能力"}
+                    </h2>
+                    <p>
+                      从空间布局到路径规划，在可交互的环境中观察、调试并比较 Jev
+                      的决策。
+                    </p>
+                  </div>
+                  {route === "overview" && (
+                    <button
+                      className="primary"
+                      onClick={() => navigate("catalog")}
+                    >
+                      开始一个实验 <ArrowUpRight size={17} />
+                    </button>
+                  )}
+                </div>
+                {route === "overview" && (
+                  <section className="core-hangar" aria-label="Jev 核心实验舱">
+                    <div className="hangar-copy">
+                      <span className="eyebrow">
+                        ORBITAL DECISION CHAMBER / 01
+                      </span>
+                      <h3>选择，在这里变得可见。</h3>
+                      <p>
+                        装载一个实验，让状态、候选与结果在同一条轨迹上展开。
+                      </p>
+                      <div className="hangar-spec">
+                        <span>01 观察</span>
+                        <i />
+                        <span>02 决策</span>
+                        <i />
+                        <span>03 验证</span>
+                      </div>
+                      <small>核心待机 · 启动实验后随实际状态响应</small>
+                    </div>
+                    <JevCore />
+                    <div className="hangar-rail" aria-hidden="true" />
+                  </section>
+                )}
+                <div className="experiment-catalog">
+                  {catalog.map((e, i) => (
+                    <article className="panel experiment-card" key={e.id}>
+                      <ExperimentPod kind={e.id} index={i} />
+                      <div className="experiment-copy">
+                        <span className="eyebrow">
+                          {e.english} · v{e.version}
+                        </span>
+                        <h3>{e.name}</h3>
+                        <p>{e.description}</p>
+                        <small>{e.ability}</small>
+                        <div className="mode-badges">
+                          {e.modes.map((m) => (
+                            <span className="badge" key={m}>
+                              {modes[m]}
+                            </span>
+                          ))}
+                        </div>
+                        <button onClick={() => navigate(e.id)}>
+                          进入实验 <ArrowUpRight size={16} />
+                        </button>
+                      </div>
+                    </article>
                   ))}
                 </div>
-              )}
-              <div className="keyboard-note">
-                <Keyboard size={14} />
-                手动模式：← → 移动 · ↑ 顺旋 · Z 逆旋 · ↓ 软降 · 空格硬降
-              </div>
-            </div>
-          </section>
-          <AIPanel
-            stage={loop.stage}
-            current={loop.current}
-            history={loop.history}
-            all={loop.all}
-            onTarget={setHover}
-            stats={loop.stats}
-            mode={modeLabels[loop.mode]}
-          />
-        </div>
-        <footer>
-          <span>
-            JEV TETRIS LAB <span className="muted">/</span>{" "}
-            为观察、比较与复现实验而构建
-          </span>
-          <span>
-            本地模拟无需密钥 <ChevronDown size={12} />
-          </span>
+                {route === "overview" && (
+                  <section className="recent-runs">
+                    <div className="section-title">
+                      <h2>最近运行</h2>
+                      <button onClick={() => navigate("records")}>
+                        全部记录
+                      </button>
+                    </div>
+                    <RunList
+                      runs={runs.slice(0, 4)}
+                      onSelect={(id) => {
+                        window.history.replaceState(null, "", "#records");
+                        setSelectedRun(id);
+                        setRoute("records");
+                      }}
+                    />
+                  </section>
+                )}
+                <div className="platform-note">
+                  <b>一条共同的实验链路</b>
+                  <p>
+                    配置实验 → 观察状态 → 生成合法候选 → 请求决策 → 校验 → 执行
+                    → 回看结果
+                  </p>
+                  <small>
+                    真实模型、本地策略、Mock
+                    与错误兜底始终独立标记。尚未提供长期存储、批量运行或模型对比。
+                  </small>
+                </div>
+              </>
+            )}
+          </LabContext.Provider>
+        </main>
+        <footer className="lab-footer">
+          <span>Jev AI Lab · 可观察的决策，不是隐藏推理</span>
+          <span>SESSION ONLY / PHASE 01</span>
         </footer>
-      </main>
+      </div>
       {manager && (
         <ProviderManager
           providers={providers}
           refresh={refresh}
-          onClose={() => setManager(false)}
           secretMode={secretMode}
+          onClose={() => setManager(false)}
         />
       )}
-      {settingsOpen && (
-        <Modal title="实验设置" onClose={() => setSettingsOpen(false)}>
-          <p className="muted">
-            修改设置后继续实验生效；随机种子在重新开始时应用。
-          </p>
-          <div className="form-grid">
-            {(
-              [
-                ["seed", "随机种子", 0, 4294967295],
-                ["minIntervalMs", "最小请求间隔 (ms)", 1000, 60000],
-                ["callLimit", "本局主要调用上限", 1, 10000],
-                ["candidateLimit", "提交候选上限", 2, 100],
-                ["failureLimit", "连续失败停止阈值", 1, 10],
-                ["mockDelayMs", "模拟延迟 (ms)", 0, 10000],
-              ] as const
-            ).map(([key, label, min, max]) => (
-              <label key={key}>
-                {label}
-                <input
-                  type="number"
-                  min={min}
-                  max={max}
-                  value={settings[key]}
-                  onChange={(e) =>
-                    setSettings((s) => ({
-                      ...s,
-                      [key]: Math.min(
-                        max,
-                        Math.max(min, Number(e.target.value)),
-                      ),
-                    }))
-                  }
-                />
-              </label>
-            ))}
-            <label>
-              失败处理
-              <select
-                value={settings.fallback ? "fallback" : "pause"}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    fallback: e.target.value === "fallback",
-                  }))
-                }
-              >
-                <option value="fallback">本地启发式兜底</option>
-                <option value="pause">暂停并保留错误</option>
-              </select>
-            </label>
-            <label>
-              模拟故障
-              <select
-                value={settings.mockFault}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    mockFault: e.target.value as Settings["mockFault"],
-                  }))
-                }
-              >
-                <option value="none">无故障</option>
-                <option value="error">格式 / 服务错误</option>
-                <option value="timeout">模拟超时</option>
-              </select>
-            </label>
-          </div>
-          <div className="local-note">
-            <strong>本地策略固定权重（非训练最优参数）</strong>
-            <p className="mono">
-              消行 +10 · 洞 −7 · 总高度 −0.5
-              <br />
-              凹凸 −0.35 · 最大高度 −0.8 · 顶部溢出 −10000
-            </p>
-            <p>主要调用上限不包含重试与连接测试；真实费用以供应商账单为准。</p>
-          </div>
-          <button className="primary" onClick={() => setSettingsOpen(false)}>
-            保存并关闭
-          </button>
-        </Modal>
-      )}
+    </div>
+  );
+}
+function RunList({
+  runs,
+  onSelect,
+}: {
+  runs: RunRecord[];
+  onSelect: (id: string) => void;
+}) {
+  return !runs.length ? (
+    <div className="panel runs-empty">
+      <History size={26} />
+      <h3>这里会留下你的第一条实验轨迹</h3>
+      <p>
+        先运行一个实验。完成的步骤、实际结果和错误都会记录；不会生成虚构的历史或成绩。
+      </p>
+    </div>
+  ) : (
+    <div className="run-list">
+      {runs.map((r) => (
+        <button key={r.id} className="run-row" onClick={() => onSelect(r.id)}>
+          <span>
+            <b>
+              {catalog.find((e) => e.id === r.experimentId)?.name ??
+                r.experimentId}
+            </b>
+            <small>
+              {modes[r.mode]} · {r.provider.modelId} ·{" "}
+              {new Date(r.startedAt).toLocaleString()}
+            </small>
+          </span>
+          <span className="mono">
+            {r.stepCount} 步 · {r.requests} 次请求
+          </span>
+          <span className={`badge status-${r.status}`}>
+            {statusLabels[r.status]}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }

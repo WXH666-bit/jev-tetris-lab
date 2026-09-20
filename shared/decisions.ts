@@ -101,13 +101,4 @@ export function sameIdentity(a: Identity, b: Identity) {
     a.configVersion === b.configVersion
   );
 }
-export class Epoch {
-  private version = 0;
-  invalidate() {
-    this.version++;
-  }
-  capture() {
-    const v = this.version;
-    return () => v === this.version;
-  }
-}
+export { Epoch } from "./lab/runtime.js";

@@ -5,6 +5,9 @@ import { ProviderStore } from "../backend/src/services/providerStore";
 import { mockDecision } from "../backend/src/adapters/adapter";
 import { newGame } from "../shared/game/engine";
 import { candidates, snapshot } from "../shared/game/candidates";
+import { mockAnswers } from "../shared/lab/contracts";
+import { templates } from "../shared/experiments/playground";
+import { createPath, pathQuestions } from "../shared/experiments/pathfinding";
 const config = {
   name: "Contract provider",
   protocol: "openrouter-decisions" as const,
@@ -43,6 +46,126 @@ describe("backend HTTP workflow", () => {
       body: JSON.stringify(body),
     });
   }
+  function labIdentity(experimentId: string, version: number) {
+    return {
+      experimentId,
+      runId: crypto.randomUUID(),
+      stepId: "step-0",
+      stateVersion: 0,
+      configVersion: version,
+      requestId: crypto.randomUUID(),
+    };
+  }
+  it.each(["openrouter-decisions", "typesafe-systemone"] as const)(
+    "generic %s adapter accepts non-game questions and preserves numeric usage",
+    async (protocol) => {
+      const p = store.save({ ...config, protocol });
+      send.mockImplementation(async (_url, _key, payload) => ({
+        status: 200,
+        body: {
+          answers: mockAnswers(payload.questions),
+          usage: { input_tokens: 17, output_tokens: 4 },
+          apiKey: config.apiKey,
+        },
+      }));
+      const identity = labIdentity("playground", p.version);
+      const response = await post("/lab/decisions", {
+        providerId: p.id,
+        identity,
+        ...templates.support,
+      });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.identity).toEqual(identity);
+      expect(body.result.answers.route.choice).toBe("billing");
+      expect(body.result.raw.usage.input_tokens).toBe(17);
+      expect(JSON.stringify(body)).not.toContain(config.apiKey);
+      expect(send.mock.calls[0][2].questions).toEqual(
+        templates.support.questions,
+      );
+      expect(send.mock.calls[0][2].state).not.toHaveProperty("currentPiece");
+    },
+  );
+  it("path requests construct legal questions on the server instead of trusting injected candidates", async () => {
+    const p = store.save(config),
+      path = createPath(42);
+    send.mockImplementation(async (_url, _key, payload) => ({
+      status: 200,
+      body: { answers: mockAnswers(payload.questions) },
+    }));
+    const response = await post("/lab/decisions", {
+      providerId: p.id,
+      identity: labIdentity("pathfinding", p.version),
+      state: path,
+      questions: {
+        evil: { type: "choice", criteria: { teleport: "illegal" } },
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(send.mock.calls[0][2].questions).toEqual(pathQuestions(path));
+  });
+  it("generic route rejects unknown experiments, invalid questions and mismatched answers", async () => {
+    const p = store.save(config);
+    const request = {
+      providerId: p.id,
+      identity: labIdentity("playground", p.version),
+      ...templates.support,
+    };
+    expect(
+      (
+        await post("/lab/decisions", {
+          ...request,
+          questions: { bad: { type: "choice", criteria: {} } },
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await post("/lab/decisions", {
+          ...request,
+          identity: labIdentity("missing", p.version),
+        })
+      ).status,
+    ).toBe(400);
+    expect(send).not.toHaveBeenCalled();
+    send.mockResolvedValue({
+      status: 200,
+      body: {
+        answers: {
+          route: {
+            type: "choice",
+            choice: "teleport",
+            probabilities: { teleport: 1 },
+          },
+        },
+      },
+    });
+    expect(
+      (await post("/lab/decisions", request)).status,
+    ).toBeGreaterThanOrEqual(400);
+  });
+  it("generic in-flight responses become stale after provider edits", async () => {
+    const p = store.save(config);
+    let release!: () => void;
+    send.mockImplementation(async () => {
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      return {
+        status: 200,
+        body: { answers: mockAnswers(templates.support.questions) },
+      };
+    });
+    const pending = post("/lab/decisions", {
+      providerId: p.id,
+      identity: labIdentity("playground", p.version),
+      ...templates.support,
+    });
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    store.save({ ...config, modelId: "updated" }, p.id);
+    release();
+    expect((await pending).status).toBe(409);
+  });
   it("create, list, activate, clone and delete are real persistence operations", async () => {
     const res = await post("/providers", {
       ...config,

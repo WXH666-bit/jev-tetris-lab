@@ -1,3 +1,4 @@
+import { decideStructured } from "./structured.js";
 import type {
   DecisionResult,
   GameDecisionState,
@@ -71,49 +72,22 @@ export async function decide(
   signal: AbortSignal,
   send: Transport = transport,
 ): Promise<DecisionResult> {
-  if (!p.enabled) throw new ApiError("供应商已禁用");
-  if (p.protocol === "mock") return mockDecision(state);
-  if (!p.apiKey) throw new ApiError("未配置 API Key");
-  const adapter = adapters[p.protocol];
-  if (!adapter) throw new ApiError("协议尚未实现");
-  const start = performance.now();
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const r = await send(
-        p.endpoint,
-        p.apiKey,
-        adapter.payload(p, state),
-        p.timeoutMs,
-        signal,
-      );
-      const raw = redact(r.body, [p.apiKey]);
-      let parsed;
-      try {
-        parsed = parseDecision(raw, state);
-      } catch {
-        throw new ApiError(
-          "响应格式不正确：检查 answers 类型、候选 ID 和概率范围/分布",
-          r.status,
-          0,
-          raw,
-        );
-      }
-      return {
-        ...parsed,
-        source: "Jev / 真实模型",
-        latencyMs: Math.round(performance.now() - start),
-        status: r.status,
-        attempts: attempt + 1,
-      };
-    } catch (e) {
-      if (signal.aborted) throw new ApiError("请求已取消");
-      if (
-        !(e instanceof ApiError) ||
-        attempt >= p.retries ||
-        !(e.status === 429 || e.status === 408 || (e.status ?? 0) >= 500)
-      )
-        throw e;
-      await sleep(Math.max(e.retryMs, 500 * 2 ** attempt), signal);
-    }
+  if (p.protocol === "mock") {
+    if (!p.enabled) throw new ApiError("供应商已禁用");
+    return mockDecision(state);
   }
+  const result = await decideStructured(
+    p,
+    state,
+    questions(state),
+    signal,
+    send,
+  );
+  return {
+    ...parseDecision(result.raw, state),
+    source: "Jev / 真实模型",
+    latencyMs: result.latencyMs,
+    status: result.status,
+    attempts: result.attempts,
+  };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 /** Decorative only: capped pixel ratio, 30fps, and no work in a hidden tab. */
-export function Starfield({ animated }: { animated: boolean }) {
+export function Starfield({ animated, density = 170 }: { animated: boolean; density?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -18,7 +18,7 @@ export function Starfield({ animated }: { animated: boolean }) {
     let seed = 7301;
     const random = () =>
       (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
-    const stars = Array.from({ length: 170 }, () => ({
+    const stars = Array.from({ length: density }, () => ({
       x: random(),
       y: random(),
       size: 0.45 + random() * 1.25,
@@ -118,7 +118,7 @@ export function Starfield({ animated }: { animated: boolean }) {
       document.removeEventListener("visibilitychange", resume);
       media.removeEventListener("change", resume);
     };
-  }, [animated]);
+  }, [animated, density]);
   return (
     <div className="cosmos" aria-hidden="true">
       <div className="nebula nebula-violet" />

@@ -17,12 +17,14 @@ export function TetrisBoard({
   target,
   over = false,
   landingKey = 0,
+  clearedLines = 0,
 }: {
   board: Board;
   piece: Piece;
   target?: Candidate;
   over?: boolean;
   landingKey?: number;
+  clearedLines?: number;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -44,7 +46,7 @@ export function TetrisBoard({
       }
     function draw(x: number, y: number, color: string) {
       ctx.shadowColor = color;
-      ctx.shadowBlur = 9;
+      ctx.shadowBlur = 4;
       const gradient = ctx.createLinearGradient(
         x * s,
         y * s,
@@ -63,12 +65,73 @@ export function TetrisBoard({
       ctx.fillRect(x * s + 3, y * s + 3, s - 6, 2);
       ctx.fillStyle = "#ffffff15";
       ctx.fillRect(x * s + 5, y * s + 6, s - 10, s - 14);
+      // Beveled solid: light from upper left, shaded lower/right faces.
+      const left = x * s + 2,
+        top = y * s + 2,
+        right = x * s + s - 2,
+        bottom = y * s + s - 2,
+        bevel = 5;
+      function face(points: number[][], fill: string) {
+        ctx.beginPath();
+        points.forEach(([px, py], i) =>
+          i ? ctx.lineTo(px, py) : ctx.moveTo(px, py),
+        );
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+      }
+      face(
+        [
+          [left, top],
+          [right, top],
+          [right - bevel, top + bevel],
+          [left + bevel, top + bevel],
+        ],
+        "#ffffff70",
+      );
+      face(
+        [
+          [left, top],
+          [left + bevel, top + bevel],
+          [left + bevel, bottom - bevel],
+          [left, bottom],
+        ],
+        "#d9eeff28",
+      );
+      face(
+        [
+          [right, top],
+          [right, bottom],
+          [right - bevel, bottom - bevel],
+          [right - bevel, top + bevel],
+        ],
+        "#02071d70",
+      );
+      face(
+        [
+          [left, bottom],
+          [left + bevel, bottom - bevel],
+          [right - bevel, bottom - bevel],
+          [right, bottom],
+        ],
+        "#02091d99",
+      );
     }
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = "#68788a";
     ctx.lineWidth = 1;
-    for (const [x, y] of cells(move(board, piece, "drop")))
+    for (const [x, y] of cells(move(board, piece, "drop"))) {
+      ctx.fillStyle = "#a8d3ef0e";
+      ctx.fillRect(x * s + 3, y * s + 3, s - 6, s - 6);
       ctx.strokeRect(x * s + 3, y * s + 3, s - 6, s - 6);
+      ctx.strokeRect(x * s + 7, y * s + 7, s - 14, s - 14);
+      ctx.beginPath();
+      ctx.moveTo(x * s + 3, y * s + 3);
+      ctx.lineTo(x * s + 7, y * s + 7);
+      ctx.moveTo(x * s + 27, y * s + 27);
+      ctx.lineTo(x * s + 23, y * s + 23);
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
     for (const [x, y] of cells(piece))
       draw(
@@ -79,8 +142,12 @@ export function TetrisBoard({
     if (target) {
       ctx.lineWidth = 2;
       ctx.strokeStyle = "#76e5d3";
-      for (const [x, y] of cells({ ...piece, ...target }))
+      for (const [x, y] of cells({ ...piece, ...target })) {
         ctx.strokeRect(x * s + 1, y * s + 1, s - 2, s - 2);
+        ctx.strokeStyle = "#76e5d355";
+        ctx.strokeRect(x * s + 4, y * s + 4, s - 8, s - 8);
+        ctx.strokeStyle = "#76e5d3";
+      }
     }
   }, [board, piece, target]);
   return (
@@ -94,6 +161,13 @@ export function TetrisBoard({
       />
       {landingKey > 0 && (
         <span key={landingKey} className="landing-wave" aria-hidden="true" />
+      )}
+      {clearedLines > 0 && (
+        <span
+          key={`clear-${clearedLines}`}
+          className="clear-wave"
+          aria-hidden="true"
+        />
       )}
       {over && (
         <div className="game-over">
