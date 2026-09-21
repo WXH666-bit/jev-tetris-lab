@@ -194,6 +194,31 @@ export default function DecisionPlayground() {
               </select>
             </label>
           </div>
+          <div className="decision-layers" aria-label="当前问题结构预览">
+            <div className="data-source">
+              <span>STATE</span>
+              <b>当前场景</b>
+            </div>
+            <div className="data-branches">
+              {parsed.value ? (
+                Object.entries(parsed.value.questions).map(([id, q]) => (
+                  <div className="data-layer" key={id}>
+                    <span>{q.type}</span>
+                    <b>{id}</b>
+                    <small>
+                      {q.type === "choice"
+                        ? `${Object.keys(q.criteria).length} 个合法选项`
+                        : q.type === "score"
+                          ? `评分 0–${q.criteria.length - 1}`
+                          : "回答“是”的概率"}
+                    </small>
+                  </div>
+                ))
+              ) : (
+                <span className="error">输入尚未通过校验</span>
+              )}
+            </div>
+          </div>
           <label>
             state · 当前场景 JSON
             <textarea

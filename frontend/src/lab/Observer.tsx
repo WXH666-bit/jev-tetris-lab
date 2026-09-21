@@ -1,4 +1,5 @@
-import { JevCore, coreState } from "../components/SpatialLab";
+import { coreState } from "../components/SpatialLab";
+import { LiveCore } from "../visual/LiveCore";
 import { useState, type ReactNode } from "react";
 import type { StepRecord, RunRecord } from "../../../shared/lab/records";
 import { JsonViewer } from "../components/JsonViewer";
@@ -38,8 +39,8 @@ export function Observer({
         <h2>决策观察台</h2>
         <span className="badge">{stage}</span>
       </div>
-      <JevCore
-        compact
+      <LiveCore
+        paused={!!selected || /历史|暂停|取消/.test(stage)}
         state={
           selected || stage.includes("历史")
             ? "idle"

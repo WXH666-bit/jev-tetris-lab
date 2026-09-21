@@ -1,0 +1,550 @@
+/* Lightweight CSS equipment used in the observer, catalog and WebGL fallback. */
+.jev-core {
+  --core-light: var(--accent-primary);
+  --orbit-time: 24s;
+  position: relative;
+  min-width: 0;
+  height: 270px;
+  perspective: 850px;
+}
+.core-optics {
+  position: absolute;
+  width: 280px;
+  height: 230px;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+.core-gimbal {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(-12deg) rotateY(-16deg);
+}
+.core-orbit {
+  position: absolute;
+  width: 216px;
+  height: 216px;
+  left: 32px;
+  top: 6px;
+  border: 2px solid var(--core-light);
+  border-radius: 50%;
+  transform-style: preserve-3d;
+  box-shadow:
+    inset 0 0 8px color-mix(in srgb, var(--accent-primary) 22%, transparent),
+    0 0 8px color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  animation: orbit-turn var(--orbit-time) linear infinite;
+}
+.orbit-0 {
+  --rx: 68deg;
+  --ry: 12deg;
+}
+.orbit-1 {
+  --rx: 28deg;
+  --ry: 68deg;
+  animation-direction: reverse;
+  border-width: 1px;
+  border-style: dashed;
+}
+.orbit-2 {
+  --rx: -35deg;
+  --ry: 35deg;
+  width: 186px;
+  height: 186px;
+  left: 47px;
+  top: 21px;
+  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
+}
+.orbit-3 {
+  --rx: 80deg;
+  --ry: -28deg;
+  width: 248px;
+  height: 248px;
+  left: 16px;
+  top: -10px;
+  opacity: 0.35;
+  border: 5px double var(--accent-primary);
+}
+.core-orbit i,
+.core-orbit b,
+.core-orbit em {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: var(--accent-lavender);
+  border-radius: 50%;
+  box-shadow: 0 0 14px var(--core-light);
+}
+.core-orbit i {
+  left: 26px;
+  top: 23px;
+}
+.core-orbit b {
+  right: 26px;
+  bottom: 23px;
+}
+.core-orbit em {
+  left: 48%;
+  bottom: -4px;
+  width: 5px;
+  height: 5px;
+}
+@keyframes orbit-turn {
+  from {
+    transform: rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(0);
+  }
+  to {
+    transform: rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(360deg);
+  }
+}
+.core-sphere {
+  position: absolute;
+  width: 104px;
+  height: 104px;
+  left: 88px;
+  top: 62px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 28% 23%,
+    var(--accent-lavender) 0,
+    var(--accent-primary) 7%,
+    var(--accent-primary) 24%,
+    var(--sky-middle) 48%,
+    var(--sky-start) 76%
+  );
+  box-shadow:
+    inset -13px -12px 20px var(--sky-start),
+    inset 3px 3px 9px
+      color-mix(in srgb, var(--accent-lavender) 56%, transparent),
+    -3px -2px 15px color-mix(in srgb, var(--accent-primary) 33%, transparent),
+    0 0 36px color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 47%, transparent);
+  transform: translateZ(12px);
+  overflow: hidden;
+}
+.core-sphere strong {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--accent-lavender);
+  font:
+    44px Georgia,
+    serif;
+  text-shadow: 0 2px 4px var(--sky-start);
+}
+.core-latitude {
+  position: absolute;
+  inset: 18px -6px;
+  border: 1px solid color-mix(in srgb, var(--accent-lavender) 20%, transparent);
+  border-radius: 50%;
+  transform: rotate(-30deg);
+  box-shadow:
+    0 9px 0 color-mix(in srgb, var(--accent-lavender) 9%, transparent),
+    0 -9px 0 color-mix(in srgb, var(--accent-lavender) 9%, transparent);
+}
+.core-dais {
+  position: absolute;
+  width: 210px;
+  height: 100px;
+  border-radius: 50%;
+  left: 35px;
+  bottom: -2px;
+  background:
+    radial-gradient(
+      ellipse,
+      color-mix(in srgb, var(--accent-primary) 11%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(155deg, var(--sky-middle), var(--sky-start) 72%);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 46%, transparent);
+  box-shadow:
+    0 6px 0 var(--sky-start),
+    0 7px 0 color-mix(in srgb, var(--accent-primary) 23%, transparent),
+    0 18px 22px color-mix(in srgb, var(--sky-start) 53%, transparent);
+  transform: rotateX(52deg);
+  z-index: -1;
+}
+.core-dais i {
+  position: absolute;
+  inset: 10px;
+  border: 1px dashed color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  border-radius: 50%;
+}
+.core-dais i + i {
+  inset: 20px;
+  border-style: solid;
+}
+.core-shadow {
+  position: absolute;
+  width: 100px;
+  height: 20px;
+  bottom: 27px;
+  left: 90px;
+  background: var(--sky-start);
+  filter: blur(10px);
+}
+.core-cross {
+  position: absolute;
+  font: 20px monospace;
+  color: var(--accent-lavender);
+}
+.cross-one {
+  left: 0;
+  top: 34px;
+}
+.cross-two {
+  right: 0;
+  bottom: 30px;
+}
+.core-caption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  display: grid;
+  gap: 5px;
+}
+.core-caption b {
+  font: 10px monospace;
+  letter-spacing: 3px;
+  color: var(--accent-lavender);
+}
+.core-caption span {
+  font-size: 11px;
+  color: var(--accent-lavender);
+}
+.core-requesting {
+  --orbit-time: 4s;
+  --core-light: var(--accent-primary);
+}
+.core-requesting .core-sphere {
+  filter: hue-rotate(-24deg);
+}
+.core-complete {
+  --core-light: var(--accent-lavender);
+}
+.core-complete .core-result-pulse {
+  position: absolute;
+  left: 65px;
+  top: 39px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-primary);
+  animation: core-receive 1.2s ease-out both;
+  pointer-events: none;
+}
+@keyframes core-receive {
+  from {
+    transform: scale(0.5);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+.core-error {
+  --core-light: var(--accent-primary);
+}
+.core-error .core-sphere {
+  filter: hue-rotate(145deg);
+}
+.core-error .core-caption span {
+  color: var(--accent-primary);
+}
+.core-error .core-orbit {
+  border-style: dashed;
+  animation-direction: alternate;
+  --orbit-time: 8s;
+}
+.core-compact {
+  height: 130px;
+  background:
+    radial-gradient(
+      ellipse at 25% 55%,
+      color-mix(in srgb, var(--accent-primary) 8%, transparent),
+      transparent 65%
+    ),
+    color-mix(in srgb, var(--sky-start) 40%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--accent-lavender) 15%, transparent);
+}
+.core-compact .core-optics {
+  left: 90px;
+  top: -3px;
+  transform: translateX(-50%) scale(0.5);
+  transform-origin: 50% 0;
+}
+.core-compact .core-caption {
+  left: 165px;
+  right: 12px;
+  top: 0;
+  bottom: 0;
+  align-content: center;
+  text-align: left;
+}
+.core-compact .core-caption b {
+  letter-spacing: 2px;
+}
+.experiment-pod {
+  height: 215px;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      ellipse at 50% 70%,
+      color-mix(in srgb, var(--accent-primary) 12%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(var(--sky-start), var(--sky-start));
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--accent-primary) 16%, transparent);
+}
+.pod-serial,
+.pod-coordinate {
+  position: absolute;
+  top: 17px;
+  font: 9px monospace;
+  letter-spacing: 1.5px;
+  color: var(--accent-lavender);
+}
+.pod-serial {
+  left: 18px;
+}
+.pod-coordinate {
+  right: 18px;
+}
+.pod-perspective {
+  perspective: 700px;
+  position: absolute;
+  inset: 0;
+}
+.pod-scene {
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(58deg) rotateZ(-28deg);
+  transition: transform 0.5s ease;
+}
+.experiment-card:hover .pod-scene {
+  transform: translateY(-7px) rotateX(54deg) rotateZ(-22deg) translateZ(12px);
+}
+.pod-base {
+  position: absolute;
+  width: 152px;
+  height: 152px;
+  left: -76px;
+  top: -76px;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 24px,
+      color-mix(in srgb, var(--accent-primary) 17%, transparent) 24px 25px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      var(--sky-middle) 0 24px,
+      color-mix(in srgb, var(--accent-primary) 17%, transparent) 24px 25px
+    );
+  border: 2px solid color-mix(in srgb, var(--accent-primary) 48%, transparent);
+  box-shadow:
+    0 0 0 5px var(--sky-start),
+    0 0 0 6px color-mix(in srgb, var(--accent-primary) 25%, transparent),
+    0 0 25px color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  transform: translateZ(0);
+}
+.pod-base::after {
+  content: "";
+  position: absolute;
+  left: -7px;
+  right: -7px;
+  height: 10px;
+  bottom: -12px;
+  background: linear-gradient(var(--sky-middle), var(--sky-start));
+  transform: rotateX(-90deg);
+  transform-origin: top;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 23%, transparent);
+}
+.pod-cube {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  left: -15px;
+  top: -15px;
+  transform-style: preserve-3d;
+  transform: translate3d(var(--cx), var(--cy), var(--cz));
+}
+.pod-cube i {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--accent-lavender) 53%, transparent);
+  background: var(--cube-color);
+  backface-visibility: visible;
+}
+.cube-front {
+  transform: rotateX(90deg) translateZ(15px);
+  filter: brightness(0.75);
+}
+.cube-back {
+  transform: rotateX(90deg) translateZ(-15px);
+  filter: brightness(0.5);
+}
+.cube-left {
+  transform: rotateY(90deg) translateZ(-15px);
+  filter: brightness(0.65);
+}
+.cube-right {
+  transform: rotateY(90deg) translateZ(15px);
+  filter: brightness(0.85);
+}
+.cube-top {
+  transform: translateZ(15px);
+  filter: brightness(1.25);
+}
+.cube-bottom {
+  transform: translateZ(-15px);
+  filter: brightness(0.4);
+}
+.pod-glass {
+  position: absolute;
+  width: 126px;
+  height: 110px;
+  left: -63px;
+  top: -55px;
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--accent-primary) 8%, transparent),
+    transparent 55%,
+    color-mix(in srgb, var(--accent-primary) 7%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 32%, transparent);
+  pointer-events: none;
+}
+.glass-back {
+  transform: translateY(-63px) translateZ(55px) rotateX(90deg);
+}
+.glass-front {
+  transform: translateY(63px) translateZ(55px) rotateX(90deg);
+}
+.glass-side {
+  transform: translateX(63px) translateZ(55px) rotateY(90deg);
+}
+.pod-route {
+  position: absolute;
+  width: 87px;
+  height: 108px;
+  left: -58px;
+  top: -56px;
+  border-left: 3px solid var(--accent-primary);
+  border-bottom: 3px solid var(--accent-primary);
+  border-right: 3px dashed var(--accent-primary);
+  transform: translateZ(3px);
+  filter: drop-shadow(0 0 4px var(--accent-primary));
+}
+.pod-beacon {
+  position: absolute;
+  width: 17px;
+  height: 17px;
+  border: 2px solid var(--accent-lavender);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-primary) 38%, transparent);
+  box-shadow: 0 0 17px var(--accent-primary);
+  transform: translateZ(15px);
+}
+.beacon-start {
+  left: -65px;
+  top: -62px;
+}
+.beacon-goal {
+  left: 20px;
+  top: -60px;
+}
+.pod-beacon::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--accent-primary);
+  border-radius: 50%;
+  transform: translateZ(20px);
+}
+.pod-data {
+  position: absolute;
+  width: 88px;
+  height: 60px;
+  left: -44px;
+  top: -30px;
+  border: 1px solid color-mix(in srgb, var(--accent-lavender) 59%, transparent);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent-primary) 61%, transparent),
+    color-mix(in srgb, var(--sky-middle) 93%, transparent)
+  );
+  padding: 9px;
+  color: var(--accent-lavender);
+  box-shadow:
+    0 5px 0 var(--sky-start),
+    0 6px 0 color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  transform: translateZ(30px);
+}
+.data-1 {
+  transform: translateZ(58px) translateX(8px);
+}
+.data-2 {
+  transform: translateZ(86px) translateX(16px);
+}
+.pod-data span {
+  font: 12px monospace;
+}
+.pod-data i {
+  display: block;
+  height: 2px;
+  width: 70%;
+  background: color-mix(in srgb, var(--accent-lavender) 40%, transparent);
+  margin-top: 5px;
+}
+.pod-data i + i {
+  width: 45%;
+}
+.pod-data b {
+  position: absolute;
+  right: 9px;
+  bottom: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+.pod-floor-shadow {
+  position: absolute;
+  left: 23%;
+  right: 23%;
+  height: 18px;
+  bottom: 22px;
+  background: color-mix(in srgb, var(--sky-start) 53%, transparent);
+  filter: blur(12px);
+  pointer-events: none;
+}
+.spatial-lab .experiment-card {
+  overflow: hidden;
+  transition:
+    box-shadow 0.3s,
+    border-color 0.3s;
+}
+.spatial-lab .experiment-card:hover {
+  border-color: color-mix(in srgb, var(--accent-primary) 53%, transparent);
+  box-shadow:
+    inset 0 1px color-mix(in srgb, var(--accent-lavender) 27%, transparent),
+    0 9px 0 var(--sky-start),
+    0 10px 0 color-mix(in srgb, var(--accent-primary) 37%, transparent),
+    0 28px 35px color-mix(in srgb, var(--sky-start) 53%, transparent);
+}
+.spatial-lab .experiment-copy {
+  background: linear-gradient(130deg, var(--sky-middle), var(--sky-start));
+}
+/* Tetris: shallow perspective on the vessel only; controls remain frontal. */

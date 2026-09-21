@@ -14,13 +14,14 @@ import type { Provider } from "../../shared/types";
 import type { RunRecord } from "../../shared/lab/records";
 import { api } from "./lib/api";
 import {
-  JevCore,
   OrbitalBackdrop,
   ExperimentPod,
   useSpatial,
   type VisualQuality,
 } from "./components/SpatialLab";
 import { Starfield } from "./components/Starfield";
+import { Observatory } from "./visual/Observatory";
+import { VisualContext } from "./visual/VisualContext";
 import { ProviderManager } from "./providers/ProviderManager";
 import { LabContext } from "./lab/context";
 import { catalog, frontendExperiments } from "./lab/registry";
@@ -46,6 +47,9 @@ function initialRoute() {
 export default function App() {
   const [route, setRoute] = useState(initialRoute);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [providerLoad, setProviderLoad] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [health, setHealth] = useState("连接中");
   const [secretMode, setSecretMode] = useState("等待后端");
   const [manager, setManager] = useState(false);
@@ -76,7 +80,22 @@ export default function App() {
     [provider, settings, publish, suspendToken],
   );
   async function refresh() {
-    setProviders(await api<Provider[]>("/providers"));
+    setProviderLoad("loading");
+    try {
+      const [p, h] = await Promise.all([
+        api<Provider[]>("/providers"),
+        api<{ secretMode: string }>("/health"),
+      ]);
+      setProviders(p);
+      setSecretMode(h.secretMode);
+      setHealth("服务已连接");
+      setProviderLoad("ready");
+    } catch {
+      setHealth("后端不可用 · 本地模式可用");
+      setSecretMode("无法读取后端存储状态");
+      setProviderLoad("error");
+      throw Error("无法读取供应商配置，请启动后端后重新加载。");
+    }
   }
   useEffect(() => {
     let valid = true;
@@ -89,12 +108,18 @@ export default function App() {
           setProviders(p);
           setSecretMode(h.secretMode);
           setHealth("服务已连接");
+          setProviderLoad("ready");
         }
       })
       .catch(() => {
-        if (valid) setHealth("后端不可用 · 本地模式可用");
+        if (valid) {
+          setHealth("后端不可用 · 本地模式可用");
+          setSecretMode("无法读取后端存储状态");
+          setProviderLoad("error");
+        }
       });
     const change = () => {
+      window.scrollTo(0, 0);
       setRoute(initialRoute());
       setMobilePane("environment");
       setSelectedRun(undefined);
@@ -114,6 +139,9 @@ export default function App() {
   function manage() {
     setSuspendToken((v) => v + 1);
     setManager(true);
+    void refresh().catch(() => {
+      /* Load failure is displayed in the manager. */
+    });
   }
   function motion() {
     setAnimated((v) => !v);
@@ -138,11 +166,13 @@ export default function App() {
       <Starfield
         animated={spatial.effective !== "reduced"}
         density={
-          spatial.effective === "enhanced"
-            ? 240
-            : spatial.effective === "reduced"
-              ? 65
-              : 110
+          spatial.effective === "cinematic"
+            ? 360
+            : spatial.effective === "enhanced"
+              ? 240
+              : spatial.effective === "reduced"
+                ? 65
+                : 110
         }
       />
       <OrbitalBackdrop />
@@ -200,7 +230,10 @@ export default function App() {
             <h1>{title}</h1>
           </div>
           <div className="lab-global-tools">
-            <span className="connection">
+            <span
+              className="connection"
+              data-connected={health === "服务已连接"}
+            >
               <span className="dot" />
               {health}
             </span>
@@ -246,6 +279,7 @@ export default function App() {
             >
               <option value="standard">标准空间</option>
               <option value="enhanced">增强空间</option>
+              <option value="cinematic">影院级空间</option>
               <option value="reduced">减少动态</option>
             </select>
             <button
@@ -258,200 +292,177 @@ export default function App() {
           </div>
         </header>
         <main className="lab-content">
-          <LabContext.Provider value={context}>
-            {Active ? (
-              <>
-                <div className="experiment-intro">
-                  <p>{definition?.description}</p>
-                  <span className="muted">
-                    {provider
-                      ? `已选配置：${provider.name} · ${provider.modelId} · ${provider.protocol}`
-                      : "尚未选择远端配置；默认无需密钥即可运行"}
-                  </span>
-                </div>
-                <div className="mobile-panes" role="tablist">
-                  <button
-                    role="tab"
-                    aria-selected={mobilePane === "environment"}
-                    onClick={() => setMobilePane("environment")}
-                  >
-                    实验环境
-                  </button>
-                  <button
-                    role="tab"
-                    aria-selected={mobilePane === "observer"}
-                    onClick={() => setMobilePane("observer")}
-                  >
-                    决策观察台
-                  </button>
-                </div>
-                <Active key={route} />
-              </>
-            ) : route === "settings" ? (
-              <SettingsPage
-                settings={settings}
-                onChange={setSettings}
-                animated={animated}
-                onAnimated={motion}
-              />
-            ) : route === "records" ? (
-              <>
-                <div className="page-heading">
-                  <div>
-                    <h2>本次会话的运行记录</h2>
-                    <p>
-                      按实验与运行分别保存，暂停、取消、失败和成功独立标记。刷新后不保留；最多保留
-                      100 次运行。
-                    </p>
+          <VisualContext.Provider value={spatial.effective}>
+            <LabContext.Provider value={context}>
+              {Active ? (
+                <>
+                  <div className="experiment-intro">
+                    <p>{definition?.description}</p>
+                    <span className="muted">
+                      {provider
+                        ? `已选配置：${provider.name} · ${provider.modelId} · ${provider.protocol}`
+                        : "尚未选择远端配置；默认无需密钥即可运行"}
+                    </span>
                   </div>
-                  <button
-                    disabled={!runs.length}
-                    onClick={() => downloadRuns(runs)}
-                  >
-                    <Download size={16} />
-                    导出全部脱敏 JSON
-                  </button>
-                </div>
-                {selected ? (
-                  <>
-                    <button onClick={() => setSelectedRun(undefined)}>
-                      ← 返回记录列表
-                    </button>
-                    <div className="record-detail">
-                      <h2>
-                        {
-                          catalog.find((d) => d.id === selected.experimentId)
-                            ?.name
-                        }{" "}
-                        · {statusLabels[selected.status]}
-                      </h2>
-                      <p>
-                        {modes[selected.mode]} · {selected.provider.modelId} ·{" "}
-                        {new Date(selected.startedAt).toLocaleString()}
-                      </p>
-                      <button onClick={() => downloadRuns([selected])}>
-                        导出本次运行
-                      </button>
-                      <Observer
-                        key={selected.id}
-                        stage="历史运行 · 非实时环境"
-                        current={selected.steps.at(-1)}
-                        steps={selected.steps}
-                        metrics={selected.metrics}
-                        snapshot={
-                          frontendExperiments[selected.experimentId]?.snapshot
-                        }
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <RunList runs={runs} onSelect={setSelectedRun} />
-                )}
-              </>
-            ) : (
-              <>
-                <div className="page-heading">
-                  <div>
-                    <span className="eyebrow">OBSERVE / VERIFY / COMPARE</span>
-                    <h2>
-                      {route === "overview"
-                        ? "让 AI 的每一次选择，都成为一次实验。"
-                        : "选择你想观察的决策能力"}
-                    </h2>
-                    <p>
-                      从空间布局到路径规划，在可交互的环境中观察、调试并比较 Jev
-                      的决策。
-                    </p>
-                  </div>
-                  {route === "overview" && (
+                  <div className="mobile-panes" role="tablist">
                     <button
-                      className="primary"
-                      onClick={() => navigate("catalog")}
+                      role="tab"
+                      aria-selected={mobilePane === "environment"}
+                      onClick={() => setMobilePane("environment")}
                     >
-                      开始一个实验 <ArrowUpRight size={17} />
+                      实验环境
                     </button>
-                  )}
-                </div>
-                {route === "overview" && (
-                  <section className="core-hangar" aria-label="Jev 核心实验舱">
-                    <div className="hangar-copy">
-                      <span className="eyebrow">
-                        ORBITAL DECISION CHAMBER / 01
-                      </span>
-                      <h3>选择，在这里变得可见。</h3>
+                    <button
+                      role="tab"
+                      aria-selected={mobilePane === "observer"}
+                      onClick={() => setMobilePane("observer")}
+                    >
+                      决策观察台
+                    </button>
+                  </div>
+                  <Active key={route} />
+                </>
+              ) : route === "settings" ? (
+                <SettingsPage
+                  settings={settings}
+                  onChange={setSettings}
+                  animated={animated}
+                  onAnimated={motion}
+                />
+              ) : route === "records" ? (
+                <>
+                  <div className="page-heading">
+                    <div>
+                      <h2>本次会话的运行记录</h2>
                       <p>
-                        装载一个实验，让状态、候选与结果在同一条轨迹上展开。
+                        按实验与运行分别保存，暂停、取消、失败和成功独立标记。刷新后不保留；最多保留
+                        100 次运行。
                       </p>
-                      <div className="hangar-spec">
-                        <span>01 观察</span>
-                        <i />
-                        <span>02 决策</span>
-                        <i />
-                        <span>03 验证</span>
-                      </div>
-                      <small>核心待机 · 启动实验后随实际状态响应</small>
                     </div>
-                    <JevCore />
-                    <div className="hangar-rail" aria-hidden="true" />
-                  </section>
-                )}
-                <div className="experiment-catalog">
-                  {catalog.map((e, i) => (
-                    <article className="panel experiment-card" key={e.id}>
-                      <ExperimentPod kind={e.id} index={i} />
-                      <div className="experiment-copy">
+                    <button
+                      disabled={!runs.length}
+                      onClick={() => downloadRuns(runs)}
+                    >
+                      <Download size={16} />
+                      导出全部脱敏 JSON
+                    </button>
+                  </div>
+                  {selected ? (
+                    <>
+                      <button onClick={() => setSelectedRun(undefined)}>
+                        ← 返回记录列表
+                      </button>
+                      <div className="record-detail">
+                        <h2>
+                          {
+                            catalog.find((d) => d.id === selected.experimentId)
+                              ?.name
+                          }{" "}
+                          · {statusLabels[selected.status]}
+                        </h2>
+                        <p>
+                          {modes[selected.mode]} · {selected.provider.modelId} ·{" "}
+                          {new Date(selected.startedAt).toLocaleString()}
+                        </p>
+                        <button onClick={() => downloadRuns([selected])}>
+                          导出本次运行
+                        </button>
+                        <Observer
+                          key={selected.id}
+                          stage="历史运行 · 非实时环境"
+                          current={selected.steps.at(-1)}
+                          steps={selected.steps}
+                          metrics={selected.metrics}
+                          snapshot={
+                            frontendExperiments[selected.experimentId]?.snapshot
+                          }
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <RunList runs={runs} onSelect={setSelectedRun} />
+                  )}
+                </>
+              ) : (
+                <>
+                  {route === "overview" ? (
+                    <Observatory
+                      quality={spatial.effective}
+                      navigate={navigate}
+                    />
+                  ) : (
+                    <div className="page-heading">
+                      <div>
                         <span className="eyebrow">
-                          {e.english} · v{e.version}
+                          OBSERVE / VERIFY / COMPARE
                         </span>
-                        <h3>{e.name}</h3>
-                        <p>{e.description}</p>
-                        <small>{e.ability}</small>
-                        <div className="mode-badges">
-                          {e.modes.map((m) => (
-                            <span className="badge" key={m}>
-                              {modes[m]}
+                        <h2>选择你想观察的决策能力</h2>
+                        <p>
+                          三个可运行的实验，共用同一条观察、决策与验证链路。
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {route !== "overview" && (
+                    <div className="experiment-catalog">
+                      {catalog.map((e, i) => (
+                        <article className="panel experiment-card" key={e.id}>
+                          <ExperimentPod kind={e.id} index={i} />
+                          <div className="experiment-copy">
+                            <span className="eyebrow">
+                              {e.english} · v{e.version}
                             </span>
-                          ))}
-                        </div>
-                        <button onClick={() => navigate(e.id)}>
-                          进入实验 <ArrowUpRight size={16} />
+                            <h3>{e.name}</h3>
+                            <p>{e.description}</p>
+                            <small>{e.ability}</small>
+                            <div className="mode-badges">
+                              {e.modes.map((m) => (
+                                <span className="badge" key={m}>
+                                  {modes[m]}
+                                </span>
+                              ))}
+                            </div>
+                            <button onClick={() => navigate(e.id)}>
+                              进入实验 <ArrowUpRight size={16} />
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  {route === "overview" && (
+                    <section className="recent-runs">
+                      <div className="section-title">
+                        <h2>最近运行</h2>
+                        <button onClick={() => navigate("records")}>
+                          全部记录
                         </button>
                       </div>
-                    </article>
-                  ))}
-                </div>
-                {route === "overview" && (
-                  <section className="recent-runs">
-                    <div className="section-title">
-                      <h2>最近运行</h2>
-                      <button onClick={() => navigate("records")}>
-                        全部记录
-                      </button>
-                    </div>
-                    <RunList
-                      runs={runs.slice(0, 4)}
-                      onSelect={(id) => {
-                        window.history.replaceState(null, "", "#records");
-                        setSelectedRun(id);
-                        setRoute("records");
-                      }}
-                    />
-                  </section>
-                )}
-                <div className="platform-note">
-                  <b>一条共同的实验链路</b>
-                  <p>
-                    配置实验 → 观察状态 → 生成合法候选 → 请求决策 → 校验 → 执行
-                    → 回看结果
-                  </p>
-                  <small>
-                    真实模型、本地策略、Mock
-                    与错误兜底始终独立标记。尚未提供长期存储、批量运行或模型对比。
-                  </small>
-                </div>
-              </>
-            )}
-          </LabContext.Provider>
+                      <RunList
+                        runs={runs.slice(0, 4)}
+                        onSelect={(id) => {
+                          window.history.replaceState(null, "", "#records");
+                          setSelectedRun(id);
+                          setRoute("records");
+                        }}
+                      />
+                    </section>
+                  )}
+                  <div className="platform-note">
+                    <b>一条共同的实验链路</b>
+                    <p>
+                      配置实验 → 观察状态 → 生成合法候选 → 请求决策 → 校验 →
+                      执行 → 回看结果
+                    </p>
+                    <small>
+                      真实模型、本地策略、Mock
+                      与错误兜底始终独立标记。尚未提供长期存储、批量运行或模型对比。
+                    </small>
+                  </div>
+                </>
+              )}
+            </LabContext.Provider>
+          </VisualContext.Provider>
         </main>
         <footer className="lab-footer">
           <span>Jev AI Lab · 可观察的决策，不是隐藏推理</span>
@@ -461,6 +472,7 @@ export default function App() {
       {manager && (
         <ProviderManager
           providers={providers}
+          loadStatus={providerLoad}
           refresh={refresh}
           secretMode={secretMode}
           onClose={() => setManager(false)}

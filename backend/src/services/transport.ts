@@ -44,7 +44,11 @@ export async function validateEndpoint(endpoint: string) {
   const records = await lookup(host, { all: true });
   if (!records.length || records.some((r) => !isPublic(r.address)))
     throw new ApiError("禁止访问内网、回环、保留或云元数据地址");
-  return { u, record: records[0] };
+  // Pin a validated IPv4 address when available. Some hosts resolve IPv6 first
+  // even when the local network has no working IPv6 route; pinning that first
+  // address prevents Node from falling back and causes every request to time out.
+  // Validate ALL answers above before choosing one to retain the SSRF boundary.
+  return { u, record: records.find((r) => r.family === 4) ?? records[0] };
 }
 export type Transport = (
   endpoint: string,

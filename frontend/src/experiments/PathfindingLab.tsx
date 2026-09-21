@@ -47,55 +47,77 @@ export function PathGrid({
   baseline = false,
   target,
   onCell,
+  perspective = false,
 }: {
   state: PathState;
   baseline?: boolean;
   target?: string;
   onCell?: (x: number, y: number) => void;
+  perspective?: boolean;
 }) {
   const route = baseline
     ? shortestPath(state.grid, state.start, state.goal)
     : [];
   const candidate = pathCandidates(state).find((c) => c.id === target);
   return (
-    <div className="path-grid" role="group" aria-label="完全可见路径地图">
-      {state.grid.flatMap((row, y) =>
-        row.map((wall, x) => {
-          const p = { x, y },
-            start = samePoint(p, state.start),
-            goal = samePoint(p, state.goal),
-            current = samePoint(p, state.position),
-            visits = state.visited.filter((v) => samePoint(v, p)).length;
-          return (
-            <button
-              key={`${x},${y}`}
-              type="button"
-              disabled={!onCell}
-              aria-label={`坐标 ${x},${y}${wall ? " 障碍" : ""}${start ? " 起点" : ""}${goal ? " 终点" : ""}${current ? " 当前位置" : ""}`}
-              onClick={() => onCell?.(x, y)}
-              className={`path-cell ${wall ? "wall" : ""} ${route.some((v) => samePoint(v, p)) ? "baseline" : ""} ${visits ? "visited" : ""} ${visits > 1 ? "revisited" : ""} ${candidate && samePoint(candidate, p) ? "target" : ""} ${current ? "current" : ""}`}
-            >
-              <span>
-                {current
-                  ? "●"
-                  : goal
-                    ? "◎"
-                    : start
-                      ? "S"
-                      : visits > 1
-                        ? visits
-                        : visits
-                          ? "·"
-                          : ""}
-              </span>
-            </button>
-          );
-        }),
-      )}
+    <div
+      className={`path-sandbox ${perspective ? "sandbox-perspective" : "sandbox-top"}`}
+    >
+      <div className="path-grid" role="group" aria-label="完全可见路径地图">
+        {state.grid.flatMap((row, y) =>
+          row.map((wall, x) => {
+            const p = { x, y },
+              start = samePoint(p, state.start),
+              goal = samePoint(p, state.goal),
+              current = samePoint(p, state.position),
+              visits = state.visited.filter((v) => samePoint(v, p)).length;
+            return (
+              <button
+                key={`${x},${y}`}
+                type="button"
+                disabled={!onCell}
+                aria-label={`坐标 ${x},${y}${wall ? " 障碍" : ""}${start ? " 起点" : ""}${goal ? " 终点" : ""}${current ? " 当前位置" : ""}`}
+                onClick={() => onCell?.(x, y)}
+                className={`path-cell ${wall ? "wall" : ""} ${route.some((v) => samePoint(v, p)) ? "baseline" : ""} ${visits ? "visited" : ""} ${visits > 1 ? "revisited" : ""} ${candidate && samePoint(candidate, p) ? "target" : ""} ${current ? "current" : ""}`}
+              >
+                {!!wall && <i className="obstacle-volume" aria-hidden="true" />}
+                {goal && <i className="goal-beacon" aria-hidden="true" />}
+                {start && <i className="start-beacon" aria-hidden="true" />}
+                {current && <i className="agent-probe" aria-hidden="true" />}
+                <span>
+                  {current
+                    ? "●"
+                    : goal
+                      ? "◎"
+                      : start
+                        ? "S"
+                        : visits > 1
+                          ? visits
+                          : visits
+                            ? "·"
+                            : ""}
+                </span>
+              </button>
+            );
+          }),
+        )}
+        <svg
+          className="actual-route"
+          viewBox={`0 0 ${state.grid[0].length} ${state.grid.length}`}
+          aria-label="实际已走路径"
+        >
+          <polyline
+            points={state.visited
+              .map((v) => `${v.x + 0.5},${v.y + 0.5}`)
+              .join(" ")}
+          />
+        </svg>
+      </div>
     </div>
   );
 }
 export default function PathfindingLab() {
+  const [perspective, setPerspective] = useState(true);
   const { settings } = useLab();
   const [seed, setSeed] = useState(settings.seed),
     [maxSteps, setMaxSteps] = useState(100);
@@ -191,7 +213,22 @@ export default function PathfindingLab() {
             种子和最大步数修改后点击“重置地图”生效。暂停时可点击空格编辑障碍；修改会创建新运行。
           </p>
           {hover && <p className="cyan">候选快照 · 决策前位置（非当前位置）</p>}
+          <div className="view-switch" role="group" aria-label="地图视角">
+            <button
+              aria-pressed={perspective}
+              onClick={() => setPerspective(true)}
+            >
+              立体沙盘
+            </button>
+            <button
+              aria-pressed={!perspective}
+              onClick={() => setPerspective(false)}
+            >
+              俯视分析
+            </button>
+          </div>
           <PathGrid
+            perspective={perspective}
             state={
               hover && runner.current
                 ? (runner.current.state as PathState)

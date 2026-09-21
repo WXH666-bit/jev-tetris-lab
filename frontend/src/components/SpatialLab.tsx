@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
-export type VisualQuality = "standard" | "enhanced" | "reduced";
+export type VisualQuality = "standard" | "enhanced" | "cinematic" | "reduced";
 export function useSpatial(animated: boolean) {
   const ref = useRef<HTMLDivElement>(null);
   const [quality, setQuality] = useState<VisualQuality>(() => {
     const saved = localStorage.getItem("jev-visual-quality");
-    return saved === "enhanced" || saved === "reduced" ? saved : "standard";
+    return saved === "standard" || saved === "cinematic" || saved === "reduced"
+      ? saved
+      : "enhanced";
   });
   const [systemReduced, setReduced] = useState(false);
   const lowPower =
@@ -13,7 +15,7 @@ export function useSpatial(animated: boolean) {
     ((navigator.hardwareConcurrency || 8) <= 4 ||
       ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ??
         8) <= 4);
-  const effective =
+  const effective: VisualQuality =
     !animated || systemReduced || quality === "reduced"
       ? "reduced"
       : lowPower
@@ -46,7 +48,8 @@ export function useSpatial(animated: boolean) {
     };
     const move = (event: PointerEvent) => {
       if (
-        effective !== "enhanced" ||
+        (effective !== "enhanced" && effective !== "cinematic") ||
+        document.activeElement?.matches("input,textarea,select") ||
         document.hidden ||
         event.pointerType !== "mouse" ||
         frame
@@ -64,10 +67,12 @@ export function useSpatial(animated: boolean) {
     reset();
     window.addEventListener("pointermove", move, { passive: true });
     document.addEventListener("visibilitychange", visibility);
+    document.addEventListener("focusin", reset);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", move);
       document.removeEventListener("visibilitychange", visibility);
+      document.removeEventListener("focusin", reset);
     };
   }, [effective]);
   return { ref, quality, setQuality, effective, lowPower, systemReduced };
@@ -80,7 +85,11 @@ export function coreState(
   completed = false,
 ): CoreState {
   if (error) return "error";
-  if (/请求模型|请求决策|等待调用|生成候选|校验结果|执行动作/.test(stage))
+  if (
+    /请求模型|请求决策|等待调用|生成候选|校验结果|执行动作|Mock 模拟|本地评分|本地基线/.test(
+      stage,
+    )
+  )
     return "requesting";
   return completed ? "complete" : "idle";
 }

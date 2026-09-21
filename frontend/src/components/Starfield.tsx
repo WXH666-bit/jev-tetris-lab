@@ -1,7 +1,13 @@
 import { useEffect, useRef } from "react";
 
 /** Decorative only: capped pixel ratio, 30fps, and no work in a hidden tab. */
-export function Starfield({ animated, density = 170 }: { animated: boolean; density?: number }) {
+export function Starfield({
+  animated,
+  density = 170,
+}: {
+  animated: boolean;
+  density?: number;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -39,7 +45,7 @@ export function Starfield({ animated, density = 170 }: { animated: boolean; dens
           height;
         const alpha =
           0.28 + (0.5 + 0.5 * Math.sin(time * 0.0006 + star.phase)) * 0.55;
-        ctx.fillStyle = `rgba(${star.depth > 0.65 ? "200,211,255" : "136,161,228"},${alpha})`;
+        ctx.fillStyle = `rgba(${star.depth > 0.65 ? "224,195,252" : "194,233,251"},${alpha})`;
         ctx.beginPath();
         ctx.arc(x, y, star.size, 0, Math.PI * 2);
         ctx.fill();
@@ -99,7 +105,12 @@ export function Starfield({ animated, density = 170 }: { animated: boolean; dens
       draw();
     }
     function move(event: PointerEvent) {
-      if (animated && !media.matches && event.pointerType === "mouse")
+      if (
+        animated &&
+        !media.matches &&
+        event.pointerType === "mouse" &&
+        !document.activeElement?.matches("input,textarea,select")
+      )
         pointer = {
           x: event.clientX / width - 0.5,
           y: event.clientY / height - 0.5,

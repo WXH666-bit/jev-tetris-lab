@@ -1,15 +1,17 @@
 import { useEffect, useRef } from "react";
 import type { Board, Candidate, Piece } from "../../../shared/types";
 import { cells, move } from "../../../shared/game/engine";
+import { clearedRowPositions } from "../visual/landing";
+import { palette } from "../visual/tokens";
 export const COLORS = [
   "#101820",
-  "#48c9df",
-  "#e9c864",
-  "#b391ec",
-  "#61c999",
-  "#f07885",
-  "#6e9ae6",
-  "#e8a26a",
+  palette.mint,
+  palette.highlight,
+  palette.primary,
+  palette.success,
+  palette.peach,
+  palette.info,
+  palette.lavender,
 ];
 export function TetrisBoard({
   board,
@@ -18,6 +20,8 @@ export function TetrisBoard({
   over = false,
   landingKey = 0,
   clearedLines = 0,
+  display = false,
+  lockEvent,
 }: {
   board: Board;
   piece: Piece;
@@ -25,8 +29,32 @@ export function TetrisBoard({
   over?: boolean;
   landingKey?: number;
   clearedLines?: number;
+  display?: boolean;
+  lockEvent?: { board: Board; piece: Piece };
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const previous = useRef({ board, piece, landingKey, clearedLines });
+  const flash = useRef<{ key: number; rows: number[]; y: number }>({
+    key: 0,
+    rows: [],
+    y: 19,
+  });
+  // Rendering can skip intermediate movement frames. Hard drop from the last visible pose
+  // uses the same engine move function; rows are shown only after a confirmed lock/clear.
+  if (landingKey !== previous.current.landingKey) {
+    const last = previous.current;
+    const source = lockEvent ?? last;
+    const landing = move(source.board, source.piece, "drop");
+    flash.current = {
+      key: landingKey,
+      rows:
+        clearedLines > last.clearedLines
+          ? clearedRowPositions(source.board, landing)
+          : [],
+      y: Math.max(...cells(landing).map(([, y]) => y)),
+    };
+  }
+  previous.current = { board, piece, landingKey, clearedLines };
   useEffect(() => {
     const canvas = ref.current!,
       ctx = canvas.getContext("2d")!,
@@ -141,17 +169,22 @@ export function TetrisBoard({
       );
     if (target) {
       ctx.lineWidth = 2;
-      ctx.strokeStyle = "#76e5d3";
+      ctx.strokeStyle = palette.primary;
       for (const [x, y] of cells({ ...piece, ...target })) {
         ctx.strokeRect(x * s + 1, y * s + 1, s - 2, s - 2);
-        ctx.strokeStyle = "#76e5d355";
+        ctx.strokeStyle = `${palette.primary}55`;
         ctx.strokeRect(x * s + 4, y * s + 4, s - 8, s - 8);
-        ctx.strokeStyle = "#76e5d3";
+        ctx.strokeStyle = palette.primary;
       }
     }
   }, [board, piece, target]);
   return (
-    <div className="board-wrap">
+    <div
+      className={`board-wrap ${display ? "board-display" : "board-analysis"}`}
+    >
+      <div className="tank-depth" aria-hidden="true" />
+      <div className="tank-corner corner-left" aria-hidden="true" />
+      <div className="tank-corner corner-right" aria-hidden="true" />
       <canvas
         ref={ref}
         width={300}
@@ -160,15 +193,21 @@ export function TetrisBoard({
         role="img"
       />
       {landingKey > 0 && (
-        <span key={landingKey} className="landing-wave" aria-hidden="true" />
-      )}
-      {clearedLines > 0 && (
         <span
-          key={`clear-${clearedLines}`}
-          className="clear-wave"
+          key={landingKey}
+          style={{ top: `${flash.current.y * 5}%` }}
+          className="landing-wave"
           aria-hidden="true"
         />
       )}
+      {flash.current.rows.map((row) => (
+        <span
+          key={`${flash.current.key}-${row}`}
+          style={{ top: `${row * 5}%` }}
+          className="clear-row"
+          aria-hidden="true"
+        />
+      ))}
       {over && (
         <div className="game-over">
           <strong>实验结束</strong>

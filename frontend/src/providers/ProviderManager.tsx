@@ -52,11 +52,13 @@ export function ProviderManager({
   refresh,
   onClose,
   secretMode,
+  loadStatus = "ready",
 }: {
   providers: Provider[];
   refresh: () => Promise<void>;
   onClose: () => void;
   secretMode: string;
+  loadStatus?: "loading" | "ready" | "error";
 }) {
   const [editing, setEditing] = useState<Provider | null | undefined>();
   const [error, setError] = useState("");
@@ -78,6 +80,30 @@ export function ProviderManager({
       <div className="security-note">
         密钥存储：{secretMode}。浏览器不会收到已保存的密钥。
       </div>
+      {loadStatus === "error" && (
+        <div role="alert" className="notice">
+          <strong>供应商配置读取失败，不代表配置已删除。</strong>
+          <p>
+            请确认本机后端已启动。只运行 Vite 前端时，网页无法读取 SQLite
+            中保存的供应商。
+          </p>
+          <p>
+            已有前端运行时，可在项目目录另开终端执行{" "}
+            <code>npx tsx watch backend/src/server.ts</code>，然后重新加载。
+          </p>
+          {providers.length > 0 && (
+            <p>下方为上次成功读取的配置，当前连接状态尚未确认。</p>
+          )}
+          <button
+            onClick={() => {
+              void refresh().catch(() => {});
+            }}
+          >
+            重新加载配置
+          </button>
+        </div>
+      )}
+      {loadStatus === "loading" && <p role="status">正在读取本机供应商配置…</p>}
       {error && (
         <p role="alert" className="error">
           {error}
@@ -102,7 +128,7 @@ export function ProviderManager({
             </button>
           </div>
           <div className="provider-grid">
-            {providers.length === 0 && (
+            {loadStatus === "ready" && providers.length === 0 && (
               <div className="empty">
                 <FlaskConical size={30} />
                 <h3>接入你的第一个模型</h3>

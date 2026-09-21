@@ -90,6 +90,7 @@ export default function TetrisWorkspace() {
   const { provider, settings, suspendToken } = useLab();
   const loop = useDecisionLoop(provider, settings);
   const [hover, setHover] = useState<Candidate>();
+  const [displayView, setDisplayView] = useState(false);
   useEffect(() => setHover(undefined), [loop.game.pieceId, loop.mode]);
   const steps = useMemo(
     () =>
@@ -208,6 +209,28 @@ export default function TetrisWorkspace() {
     setHover(undefined);
   }, [suspendToken]);
   const boardMetrics = metrics(loop.game.board);
+  const landedRecord = loop.history.find(
+    (r) =>
+      r.executed &&
+      r.state.pieceId === `${loop.game.sessionId}:${loop.game.pieces - 1}`,
+  );
+  const landedCandidate = landedRecord?.state.candidates.find(
+    (c) => c.id === landedRecord.executed?.candidateId,
+  );
+  const manualAction = loop.actionLog.at(-1);
+  const lockEvent =
+    landedRecord && landedCandidate
+      ? {
+          board: landedRecord.state.board,
+          piece: { ...landedRecord.state.currentPiece, ...landedCandidate },
+        }
+      : manualAction?.manual &&
+          manualAction.state.pieces === loop.game.pieces - 1
+        ? {
+            board: manualAction.state.board,
+            piece: manualAction.state.currentPiece,
+          }
+        : undefined;
   const observer = (
     <Observer
       key={loop.game.sessionId}
@@ -268,12 +291,28 @@ export default function TetrisWorkspace() {
         </div>
         <div className="game-stage">
           <div className="board-column">
+            <div className="view-switch" role="group" aria-label="棋盘视角">
+              <button
+                aria-pressed={!displayView}
+                onClick={() => setDisplayView(false)}
+              >
+                正视分析
+              </button>
+              <button
+                aria-pressed={displayView}
+                onClick={() => setDisplayView(true)}
+              >
+                立体展示
+              </button>
+            </div>
             <div className="board-ruler">
               {Array.from({ length: 10 }, (_, i) => (
                 <span key={i}>{i}</span>
               ))}
             </div>
             <TetrisBoard
+              display={displayView}
+              lockEvent={lockEvent}
               landingKey={loop.game.pieces}
               clearedLines={loop.game.clearedLines}
               board={
