@@ -398,7 +398,7 @@ body {
 .observatory {
   position: relative;
   isolation: isolate;
-  min-height: 660px;
+  min-height: 600px;
   border-bottom: 1px solid var(--edge);
   margin: -12px -8px 28px;
   overflow: hidden;
@@ -471,8 +471,9 @@ body {
 }
 .core-name {
   position: absolute;
-  left: 55%;
-  top: 330px;
+  left: 48%;
+  right: 2%;
+  bottom: 150px;
   text-align: center;
   pointer-events: none;
   display: grid;
@@ -490,31 +491,11 @@ body {
   font-size: 11px;
   color: var(--muted);
 }
-.scene-selector {
-  pointer-events: auto;
-  display: flex;
-  justify-content: center;
-  gap: 5px;
-  margin-top: 5px;
-}
-.scene-selector button {
-  padding: 5px 10px;
-  font-size: 12px;
-  border-radius: 20px;
-  background: #18152ecc;
-  border: 1px solid #e0c3fc26;
-  color: var(--muted);
-}
-.scene-selector button[aria-pressed="true"] {
-  color: #f4e9ff;
-  background: #514065;
-  border-color: #e0c3fc80;
-}
 .observatory-entries {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 58px;
+  bottom: 24px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
@@ -529,17 +510,11 @@ body {
   text-align: left;
   white-space: normal;
   padding: 14px 20px;
-  background: linear-gradient(
-    120deg,
-    color-mix(in srgb, var(--sky-middle) 80%, transparent),
-    var(--screen)
-  );
-  border-width: 1px 0 0;
-  border-radius: 2px 18px 4px 4px;
+  background: color-mix(in srgb, var(--screen) 88%, transparent);
+  border: 1px solid var(--edge);
+  border-radius: 12px;
   position: relative;
-  box-shadow:
-    0 4px 0 var(--deep-shadow),
-    inset 2px 0 var(--edge);
+  box-shadow: 0 8px 24px #05061033;
   min-height: 105px;
 }
 .observatory-entry strong {
@@ -558,68 +533,7 @@ body {
   font-size: 10px;
   letter-spacing: 1px;
 }
-.observatory-entry.entry-1 {
-  margin-top: 12px;
-}
-.observatory-entry.entry-2 {
-  margin-top: 24px;
-}
-.renderer-tools {
-  position: absolute;
-  bottom: 0;
-  left: 18px;
-  right: 18px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 42px;
-  flex-wrap: wrap;
-  z-index: 3;
-  font-size: 11px;
-  color: var(--muted);
-}
-.spatial-lab .renderer-tools button {
-  min-height: 28px;
-  font-size: 11px;
-  padding: 3px 8px;
-  background: transparent;
-  box-shadow: none;
-  border: 0;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.renderer-tools details {
-  margin-left: auto;
-  cursor: pointer;
-}
-.presentation-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.presentation-controls input[type="range"] {
-  width: 92px;
-  min-width: 0;
-  height: 24px;
-  padding: 0;
-  accent-color: #c9c9e4;
-}
-.presentation-controls output {
-  font-size: 11px;
-  min-width: 45px;
-}
-.renderer-tools details > div {
-  position: absolute;
-  right: 0;
-  bottom: 40px;
-  padding: 16px;
-  background: var(--screen);
-  border: 1px solid var(--edge);
-  max-width: 400px;
-  border-radius: 10px;
-  font: 12px Consolas;
-  line-height: 1.8;
-}
+
 .observatory-fallback {
   position: absolute;
   top: 40px;
@@ -1105,13 +1019,10 @@ body {
 }
 @media (min-width: 1550px) {
   .observatory {
-    min-height: 720px;
+    min-height: 660px;
   }
   .observatory-heading {
     top: 55px;
-  }
-  .core-name {
-    top: 370px;
   }
 }
 @media (max-width: 1250px) {
@@ -1122,7 +1033,7 @@ body {
     padding: 20px;
   }
   .observatory {
-    min-height: 630px;
+    min-height: 600px;
   }
   .observatory-heading {
     left: 12px;
@@ -1132,10 +1043,6 @@ body {
   }
   .spatial-lab .observatory-entry {
     padding: 12px;
-  }
-  .core-name {
-    left: 55%;
-    top: 315px;
   }
   .spatial-lab .game-stage {
     gap: 16px;
@@ -1161,9 +1068,6 @@ body {
   }
   .observatory-heading {
     width: 45%;
-  }
-  .core-name {
-    left: 54%;
   }
   .renderer-status {
     font-size: 10px;
@@ -1208,7 +1112,7 @@ body {
     font-size: 11px;
   }
   .observatory {
-    min-height: 850px;
+    min-height: 790px;
     margin: -5px -4px 20px;
   }
   .observatory-heading {
@@ -1241,6 +1145,7 @@ body {
   }
   .core-name {
     top: 414px;
+    bottom: auto;
     left: 0;
     right: 0;
   }
@@ -1254,7 +1159,7 @@ body {
     margin: auto;
   }
   .observatory-entries {
-    top: 505px;
+    top: 460px;
     bottom: auto;
     grid-template-columns: 1fr;
     gap: 10px;
@@ -1281,15 +1186,7 @@ body {
   .observatory-entry.entry-2 {
     margin-top: 0;
   }
-  .renderer-tools {
-    left: 6px;
-    right: 6px;
-    gap: 6px;
-    bottom: 0;
-  }
-  .renderer-tools details > div {
-    max-width: 300px;
-  }
+
   .spatial-lab .game-stage {
     padding: 18px 12px;
     gap: 17px;
@@ -1416,7 +1313,7 @@ body {
     min-height: 35px;
   }
   .observatory {
-    min-height: 725px;
+    min-height: 675px;
   }
   .observatory-heading h2 {
     font-size: 27px;
@@ -1430,7 +1327,7 @@ body {
     top: 348px;
   }
   .observatory-entries {
-    top: 435px;
+    top: 390px;
   }
   .spatial-lab .game-panel {
     display: flex;

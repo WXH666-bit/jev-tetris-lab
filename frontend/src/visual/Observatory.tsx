@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Orbit, Pause, Play, RotateCcw } from "lucide-react";
-import { REFERENCE_END } from "./resonanceChoreography";
+import { ArrowUpRight, Orbit } from "lucide-react";
 import type { Quality } from "./tokens";
-import type { SceneStats } from "./ObservatoryScene";
-import { JevCore } from "../components/SpatialLab";
 const entries = [
   {
     id: "tetris",
@@ -35,46 +32,13 @@ export function Observatory({
   navigate: (id: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
-  const sceneRef =
-    useRef<ReturnType<typeof import("./ObservatoryScene").mountObservatory>>(
-      undefined,
-    );
-  const [appearance, setAppearance] = useState<"resonance" | "pearl">(
-    "resonance",
-  );
-  const appearanceRef = useRef(appearance);
-  const [presentation, setPresentation] = useState({ time: 0, paused: false });
-  const presentationRef = useRef(presentation);
-  function reportPresentation(time: number, paused: boolean) {
-    // Clamp the inspection timeline only; the particle animation continues beyond 7.17 s.
-    const next = { time: Math.min(time, REFERENCE_END), paused };
-    if (
-      next.time !== presentationRef.current.time ||
-      next.paused !== presentationRef.current.paused
-    ) {
-      presentationRef.current = next;
-      setPresentation(next);
-    }
-  }
-  appearanceRef.current = appearance;
-  useEffect(() => {
-    sceneRef.current?.setAppearance(appearance);
-  }, [appearance]);
-  const [status, setStatus] = useState("正在加载 3D 装置");
-  const [stats, setStats] = useState<SceneStats>();
-  const [fallback, setFallback] = useState(false),
-    [attempt, setAttempt] = useState(0);
+  const [status, setStatus] = useState("loading");
   useEffect(() => {
     let cancelled = false;
     let scene:
       | ReturnType<typeof import("./ObservatoryScene").mountObservatory>
       | undefined;
-    setStats(undefined);
-    if (fallback) {
-      setStatus("二维备用视图");
-      return;
-    }
-    setStatus("正在加载 3D 装置");
+    setStatus("loading");
     import("./ObservatoryScene")
       .then(({ mountObservatory }) => {
         if (cancelled || !host.current) return;
@@ -82,35 +46,27 @@ export function Observatory({
           scene = mountObservatory(
             host.current,
             quality,
-            setStats,
+            () => {},
             setStatus,
             "home",
-            reportPresentation,
-          );
-          sceneRef.current = scene;
-          scene.setAppearance(appearanceRef.current);
-          scene.setPresentation(
-            presentationRef.current.time,
-            presentationRef.current.paused,
           );
         } catch {
-          setStatus("WebGL 不可用 · 已切换备用视图");
+          setStatus("unavailable");
         }
       })
       .catch(() => {
-        if (!cancelled) setStatus("3D 资源加载失败 · 已切换备用视图");
+        if (!cancelled) setStatus("unavailable");
       });
     return () => {
       cancelled = true;
       scene?.dispose();
-      sceneRef.current = undefined;
     };
-  }, [quality, fallback, attempt]);
+  }, [quality]);
   const ready = status === "实时 3D";
   return (
     <section
       className="observatory"
-      data-appearance={appearance}
+      data-appearance="resonance"
       aria-label="星云观测站"
     >
       <div className="observatory-heading">
@@ -130,31 +86,8 @@ export function Observatory({
         <span className="observatory-id">状态 → 候选 → 决策 → 实际结果</span>
       </div>
       <div className={`observatory-scene ${ready ? "ready" : ""}`} ref={host} />
-      {!ready && (
-        <div className="observatory-fallback">
-          <JevCore />
-          <span>实验入口始终可用</span>
-        </div>
-      )}
       <div className="core-name">
-        <b>
-          {appearance === "resonance" && ready ? "JEV / RESONANCE" : "JEV CORE"}
-        </b>
-        <span>装饰预览 · 非模型数据</span>
-        <div className="scene-selector" role="group" aria-label="首页装置">
-          <button
-            aria-pressed={appearance === "resonance"}
-            onClick={() => setAppearance("resonance")}
-          >
-            星轨共振
-          </button>
-          <button
-            aria-pressed={appearance === "pearl"}
-            onClick={() => setAppearance("pearl")}
-          >
-            珠光核心
-          </button>
-        </div>
+        <b>JEV / RESONANCE</b>
       </div>
       <div className="observatory-entries">
         {entries.map((e, i) => (
@@ -173,73 +106,6 @@ export function Observatory({
             <span>{e.note}</span>
           </button>
         ))}
-      </div>
-      <div className="renderer-tools">
-        {appearance === "resonance" && ready && (
-          <div
-            className="presentation-controls"
-            role="group"
-            aria-label="装置镜头回看"
-          >
-            <button
-              disabled={quality === "reduced"}
-              aria-label={presentation.paused ? "播放装置" : "暂停装置"}
-              onClick={() =>
-                sceneRef.current?.setPresentation(
-                  undefined,
-                  !presentation.paused,
-                )
-              }
-            >
-              {presentation.paused ? <Play size={14} /> : <Pause size={14} />}
-            </button>
-            <input
-              type="range"
-              min="0"
-              max={REFERENCE_END}
-              step="0.01"
-              value={presentation.time}
-              aria-label="参考镜头时间"
-              title="拖动以定格查看；始终保持斜前方视角"
-              onChange={(event) =>
-                sceneRef.current?.setPresentation(
-                  Number(event.target.value),
-                  true,
-                )
-              }
-            />
-            <output className="mono">{presentation.time.toFixed(2)} s</output>
-            <button
-              aria-label="重播参考镜头"
-              onClick={() => sceneRef.current?.setPresentation(0, false)}
-            >
-              <RotateCcw size={13} /> 重播
-            </button>
-          </div>
-        )}
-        <span className="renderer-status">{status}</span>
-        <button
-          onClick={() => {
-            setFallback((v) => !v);
-            setAttempt((v) => v + 1);
-          }}
-        >
-          {fallback ? "恢复 3D" : "使用备用视图"}
-        </button>
-        {!ready && !fallback && (
-          <button onClick={() => setAttempt((v) => v + 1)}>重试加载</button>
-        )}
-        <details>
-          <summary>渲染监测</summary>
-          <div>
-            {stats && ready
-              ? `${stats.fps} FPS · CPU 提交 ${stats.frameMs} ms · ${stats.calls} draws · ${stats.triangles.toLocaleString()} 三角形 · DPR ${stats.dpr.toFixed(2)}`
-              : quality === "reduced"
-                ? "静态呈现 · 仅在尺寸变化时渲染"
-                : "采样未提供"}
-            <p>本地渲染采样，非模型耗时；离屏或后台暂停。</p>
-          </div>
-        </details>
       </div>
     </section>
   );

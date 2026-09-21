@@ -1,6 +1,5 @@
 import * as T from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { palette as p, materials, qualityBudget, type Quality } from "./tokens";
 import type { CoreState } from "../components/SpatialLab";
 import { createResonanceField } from "./ResonanceField";
@@ -19,7 +18,6 @@ export function mountObservatory(
   onStats: (s: SceneStats) => void,
   onStatus: (s: string) => void,
   variant: "home" | "core" = "home",
-  onPresentation?: (time: number, paused: boolean) => void,
 ) {
   const budget = qualityBudget[quality];
   const renderer = new T.WebGLRenderer({
@@ -35,7 +33,7 @@ export function mountObservatory(
   renderer.domElement.setAttribute(
     "aria-label",
     variant === "home"
-      ? "实时 3D 珠光核心与三个实验微场景（装饰预览）"
+      ? "星轨共振：圆环、串珠光轴与五线谱粒子"
       : "实时 3D 核心 · 应用状态可视化",
   );
   host.append(renderer.domElement);
@@ -82,14 +80,6 @@ export function mountObservatory(
     emissive: p.peach,
     emissiveIntensity: 0.25,
   });
-  const glass = new T.MeshPhysicalMaterial({
-    ...materials.pearl,
-    color: p.secondary,
-    transparent: true,
-    opacity: 0.12,
-    depthWrite: false,
-    side: T.DoubleSide,
-  });
   function mesh(
     geometry: T.BufferGeometry,
     material: T.Material,
@@ -102,25 +92,6 @@ export function mountObservatory(
     item.position.set(x, y, z);
     parent.add(item);
     return item;
-  }
-  function box(
-    parent: T.Object3D,
-    w: number,
-    h: number,
-    d: number,
-    material: T.Material,
-    x = 0,
-    y = 0,
-    z = 0,
-  ) {
-    return mesh(
-      new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.15),
-      material,
-      parent,
-      x,
-      y,
-      z,
-    );
   }
   function ring(
     parent: T.Object3D,
@@ -189,135 +160,6 @@ export function mountObservatory(
     Math.PI / 2;
   ring(dais, 1.22, 0.023, energy);
   ring(dais, 0.95, 0.018, blue);
-  const pods = [new T.Group(), new T.Group(), new T.Group()];
-  pods.forEach((g) => world.add(g));
-  for (const pod of pods) {
-    box(pod, 2.15, 0.16, 1.65, alloy, 0, -0.6);
-    box(pod, 2, 0.025, 1.5, blue, 0, -0.5);
-    box(pod, 1.92, 0.035, 1.42, alloy, 0, -0.47);
-    pod.rotation.set(0.3, -0.4, 0);
-  }
-  // Tetris experiment: a glass tank, structural uprights and beveled solid tetrominoes.
-  const tank = pods[0];
-  box(tank, 1.7, 1.9, 1.1, glass, 0, 0.42);
-  for (const x of [-0.85, 0.85])
-    for (const z of [-0.55, 0.55])
-      box(tank, 0.035, 1.9, 0.035, pearl, x, 0.42, z);
-  [
-    [-0.45, -0.22],
-    [0, -0.22],
-    [0.45, -0.22],
-    [0, 0.22],
-  ].forEach(([x, y]) => box(tank, 0.42, 0.42, 0.42, energy, x, y, 0.12));
-  [
-    [-0.45, 1],
-    [0, 1],
-    [0.45, 1],
-    [0.45, 0.56],
-  ].forEach(([x, y]) => box(tank, 0.42, 0.42, 0.42, pearl, x, y, -0.13));
-  // Navigation sandbox: terrain, obstacle columns, route and a hovering probe.
-  const sandbox = pods[1];
-  const grid = new T.GridHelper(1.8, 6, p.lavender, p.skyMiddle);
-  grid.position.y = -0.44;
-  sandbox.add(grid);
-  [
-    [-0.6, -0.45],
-    [0.3, 0.15],
-    [0.3, -0.45],
-  ].forEach(([x, z], i) =>
-    box(sandbox, 0.24, 0.35 + i * 0.12, 0.24, pearl, x, -0.25 + i * 0.06, z),
-  );
-  const route = [
-    new T.Vector3(-0.72, -0.4, 0.6),
-    new T.Vector3(-0.1, -0.4, 0.6),
-    new T.Vector3(-0.1, -0.4, -0.6),
-    new T.Vector3(0.72, -0.4, -0.6),
-  ];
-  mesh(
-    new T.TubeGeometry(new T.CatmullRomCurve3(route), 32, 0.025, 6, false),
-    blue,
-    sandbox,
-  );
-  const probe = mesh(
-    new T.OctahedronGeometry(0.16),
-    energy,
-    sandbox,
-    -0.1,
-    0.12,
-    0.3,
-  );
-  for (const [x, z] of [
-    [-0.72, 0.6],
-    [0.72, -0.6],
-  ]) {
-    const b = mesh(
-      new T.CylinderGeometry(0.1, 0.14, 0.3, 16),
-      blue,
-      sandbox,
-      x,
-      -0.3,
-      z,
-    );
-    b.add(new T.PointLight(p.mint, 0.3, 1));
-  }
-  // Structured decision instrument: layered physical discs, nodes and branch conduits.
-  const data = pods[2];
-  for (let i = 0; i < 3; i++) {
-    const disc = mesh(
-      new T.CylinderGeometry(0.7 - i * 0.12, 0.7 - i * 0.12, 0.065, 48),
-      i === 1 ? pearl : alloy,
-      data,
-      0,
-      -0.1 + i * 0.44,
-    );
-    const edge = ring(disc, 0.7 - i * 0.12, 0.018, i === 1 ? blue : energy);
-    edge.rotation.x = Math.PI / 2;
-    for (let j = 0; j < 3; j++) {
-      const a = (j * Math.PI * 2) / 3 + i * 0.5;
-      mesh(
-        new T.OctahedronGeometry(0.09),
-        energy,
-        disc,
-        Math.cos(a) * 0.5,
-        0.12,
-        Math.sin(a) * 0.5,
-      );
-    }
-  }
-  for (let i = 0; i < 3; i++) {
-    const x = (i - 1) * 0.55;
-    mesh(
-      new T.TubeGeometry(
-        new T.CatmullRomCurve3([
-          new T.Vector3(0, 0.9, 0),
-          new T.Vector3(x, 0.6, 0.1),
-          new T.Vector3(x, 0.05, 0.3),
-        ]),
-        16,
-        0.015,
-        5,
-        false,
-      ),
-      blue,
-      data,
-    );
-  }
-  // A cropped distant planet, lit by the same environment as the foreground instruments.
-  const planet = mesh(
-    new T.SphereGeometry(4.2, 64, 32),
-    new T.MeshPhysicalMaterial({
-      color: p.skyMiddle,
-      roughness: 0.85,
-      metalness: 0.05,
-      clearcoat: 0,
-    }),
-    scene,
-    10,
-    5,
-    -8,
-  );
-  const planetaryRing = ring(planet, 4.3, 0.04, pearl);
-  planetaryRing.rotation.set(1.12, 0.25, 0.3);
   const stars = new Float32Array(budget.stars * 3);
   for (let i = 0; i < budget.stars; i++) {
     const r = Math.sin(i * 127.1 + 4) * 43758.5453;
@@ -339,25 +181,13 @@ export function mountObservatory(
     }),
   );
   scene.add(dust);
-  const conduits = new T.Group();
-  world.add(conduits);
-  const conduitMaterial = new T.MeshBasicMaterial({
-    color: p.primary,
-    transparent: true,
-    opacity: 0.18,
-  });
-  const links: { curve: T.CubicBezierCurve3; bead: T.Mesh }[] = [];
   const resonance =
     variant === "home" ? createResonanceField(quality) : undefined;
   if (resonance) {
     world.add(resonance.group);
     core.visible = false;
-    conduits.visible = false;
-    planet.visible = false;
   }
   if (variant === "core") {
-    pods.forEach((pod) => (pod.visible = false));
-    planet.visible = false;
     dust.visible = false;
     dais.visible = false;
   }
@@ -375,9 +205,6 @@ export function mountObservatory(
     pointerY = 0,
     paused = false,
     pulseAt = -10;
-  let presentationTime = 0,
-    presentationPaused = false,
-    lastPresentationReport = 0;
   function resize() {
     const { width, height } = host.getBoundingClientRect();
     if (!width || !height) return;
@@ -389,46 +216,24 @@ export function mountObservatory(
     core.position.set(mobile ? 0 : 1.9, mobile ? 1.6 : 1.3, 0);
     core.scale.setScalar(mobile ? 1.0 : 1.26);
     if (resonance) {
+      const visibleWidth =
+        2 *
+        Math.tan(T.MathUtils.degToRad(camera.fov / 2)) *
+        camera.position.z *
+        camera.aspect;
       resonance.group.position.set(
-        mobile ? -0.25 : 2.85,
-        mobile ? 1.5 : 1.65,
+        mobile ? -0.25 : visibleWidth * 0.10,
+        mobile ? 1.5 : 1.2,
         0,
       );
-      resonance.group.scale.setScalar(mobile ? 1.1 : 0.98);
+      resonance.group.scale.setScalar(
+        mobile ? 1.1 : Math.min(1.3, (width / height) * 0.68),
+      );
       // The instrument is off-centre in the homepage. Align its observation basis
       // with the eye so perspective does not turn the intended diagonal axis vertical.
       resonance.group.lookAt(camera.position);
       resonance.setViewport(height, renderer.getPixelRatio());
     }
-    const spread = mobile ? 1.7 : Math.min(4.7, (width / height) * 2.6);
-    pods.forEach((pod, i) => {
-      pod.position.set((i - 1) * spread, mobile ? -2.35 : -2.6, 0.8);
-      pod.scale.setScalar(mobile ? 0.65 : 0.85);
-    });
-    for (const child of [...conduits.children]) {
-      if (child instanceof T.Mesh) child.geometry.dispose();
-      conduits.remove(child);
-    }
-    links.length = 0;
-    if (variant === "home")
-      pods.forEach((pod, i) => {
-        const from = new T.Vector3(core.position.x, -0.8, -0.5),
-          to = pod.position.clone().add(new T.Vector3(0, 0.25, -0.8));
-        const curve = new T.CubicBezierCurve3(
-          from,
-          new T.Vector3(from.x + (i - 1) * 0.7, -1.7, -1),
-          new T.Vector3(to.x, -1.3, -1),
-          to,
-        );
-        mesh(
-          new T.TubeGeometry(curve, 32, 0.012, 5, false),
-          conduitMaterial,
-          conduits,
-        );
-        const bead = mesh(new T.SphereGeometry(0.035, 8, 6), blue, conduits);
-        bead.position.copy(curve.getPoint(i * 0.31));
-        links.push({ curve, bead });
-      });
     if (variant === "core") {
       core.position.set(0, 0, 0);
       core.scale.setScalar(1);
@@ -446,14 +251,7 @@ export function mountObservatory(
       const dt = previous ? Math.min((now - previous) / 1000, 0.1) : 0;
       previous = now;
       elapsed += dt;
-      if (resonance?.group.visible) {
-        if (!presentationPaused) presentationTime += dt;
-        resonance.update(presentationTime);
-        if (now - lastPresentationReport > 200) {
-          onPresentation?.(presentationTime, presentationPaused);
-          lastPresentationReport = now;
-        }
-      }
+      resonance?.update(elapsed);
       orbitGroups.forEach((g, i) => {
         g.rotation.z +=
           (paused ? 0 : dt) *
@@ -467,16 +265,9 @@ export function mountObservatory(
       inner.scale.setScalar(
         1 + Math.sin(elapsed * (state === "requesting" ? 3 : 1.1)) * 0.035,
       );
-      probe.position.y = 0.12 + Math.sin(elapsed * 1.5) * 0.08;
-      links.forEach(({ curve, bead }, i) =>
-        bead.position.copy(curve.getPoint((elapsed * 0.08 + i * 0.31) % 1)),
-      );
       dust.rotation.z = elapsed * 0.003;
       world.rotation.y += (pointerX * 0.035 - world.rotation.y) * 0.04;
       world.rotation.x += (pointerY * 0.018 - world.rotation.x) * 0.04;
-      pods.forEach((g, i) => {
-        g.rotation.y = -0.4 + Math.sin(elapsed * 0.25 + i) * 0.05;
-      });
       const start = performance.now();
       renderOnce();
       totalMs += performance.now() - start;
@@ -549,29 +340,6 @@ export function mountObservatory(
   resume();
   onStatus("实时 3D");
   return {
-    setPresentation(time?: number, suspend = false) {
-      if (!resonance) return;
-      if (time !== undefined && Number.isFinite(time))
-        presentationTime = Math.max(0, time);
-      presentationPaused = suspend;
-      resonance.update(presentationTime);
-      onPresentation?.(presentationTime, presentationPaused);
-      renderOnce();
-    },
-    setAppearance(appearance: "resonance" | "pearl") {
-      if (!resonance) return;
-      resonance.group.visible = appearance === "resonance";
-      core.visible = appearance === "pearl";
-      conduits.visible = core.visible;
-      planet.visible = core.visible;
-      renderer.domElement.setAttribute(
-        "aria-label",
-        appearance === "resonance"
-          ? "实时 3D 星轨共振：纵深圆环隧道、串珠光轴与五线谱粒子（装饰预览）"
-          : "实时 3D 珠光核心与三个实验微场景（装饰预览）",
-      );
-      renderOnce();
-    },
     setState(next: CoreState, suspend = false) {
       if (next === "complete" && state !== "complete") pulseAt = elapsed;
       state = next;
@@ -606,7 +374,6 @@ export function mountObservatory(
       });
       geometries.forEach((g) => g.dispose());
       mats.forEach((m) => m.dispose());
-      conduitMaterial.dispose();
       environment.dispose();
       renderer.dispose();
       renderer.domElement.remove();

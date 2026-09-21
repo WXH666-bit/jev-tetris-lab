@@ -19,8 +19,7 @@ export function LiveCore({
   const current = useRef({ state, paused });
   current.current = { state, paused };
   const quality = useContext(VisualContext);
-  const [status, setStatus] = useState("加载装置"),
-    [attempt, setAttempt] = useState(0);
+  const [status, setStatus] = useState("加载装置");
   useEffect(() => {
     let cancelled = false;
     setStatus("加载装置");
@@ -51,7 +50,7 @@ export function LiveCore({
       instance.current?.dispose();
       instance.current = undefined;
     };
-  }, [quality, attempt]);
+  }, [quality]);
   useEffect(() => {
     instance.current?.setState(state, paused);
   }, [state, paused, pulseKey]);
@@ -78,10 +77,6 @@ export function LiveCore({
                   ? "结果已接收"
                   : "待机 · 等待实验"}
         </span>
-        <small>{status} · 仅呈现应用状态</small>
-        {status !== "实时 3D" && (
-          <button onClick={() => setAttempt((n) => n + 1)}>重试 3D</button>
-        )}
       </div>
     </div>
   );
